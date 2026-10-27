@@ -1,0 +1,232 @@
+import java.util.*;
+import java_cup.runtime.*;
+
+parser code {:
+    public void syntax_error(Symbol token) {
+        throw new InvalidSyntaxException("Syntax error at character " + token.left + ": " + token.value);
+    }
+    public void unrecovered_syntax_error(Symbol token) {
+        syntax_error(token);
+    }
+:};
+
+action code {:
+    private Long limitInteger(java.math.BigInteger value) {
+        try { return value.longValueExact(); }
+        catch (ArithmeticException e) { throw new InvalidSyntaxException("LIMIT integer is out of range"); }
+    }
+    private ConditionalExpression predicate(CompareTerm expression) {
+        return expression instanceof ConditionalExpression ? (ConditionalExpression) expression
+                : new TruthExpression(expression);
+    }
+    private Column define(Column column, int type, Number length, ColumnOptions options) {
+        column.setType(type);
+        if (length != null) {
+            if (length.doubleValue() < 1 || length.doubleValue() > 32767) {
+                throw new IllegalArgumentException("Column length must be between 1 and 32767 bytes");
+            }
+            long size = length.longValue();
+            column.setLength((int) size);
+        }
+        column.applyOpts(options);
+        return column;
+    }
+    private ArrayList<Column> primaryKey(ArrayList<Column> columns, String name) {
+        for (Column column : columns) {
+            if (column.getName().equalsIgnoreCase(name)) {
+                column.applyOpts(new ColumnOptions(true, true));
+                return columns;
+            }
+        }
+        throw new IllegalArgumentException("Unknown primary-key column: " + name);
+    }
+:};
+
+terminal SELECT, FROM, WHERE, DISTINCT, ALL, AS, LIMIT, OFFSET;
+terminal CREATE, DROP, TABLE, IF, EXISTS, PRIMARY, KEY, NOT, NULL;
+terminal INTEGER, REAL, CHAR, VARCHAR, TEXT;
+terminal INSERT, INTO, VALUES, UPDATE, SET, DELETE;
+terminal BEGIN, WORK, TRANSACTION, COMMIT, ROLLBACK, END;
+terminal AND, OR, IS, LIKE, CLIKE, IN, BETWEEN;
+terminal JOIN, INNER, LEFT, OUTER, CROSS, ON;
+terminal GROUP, BY, HAVING, ORDER, ASC, DESC;
+terminal LPAREN, RPAREN, COMMA, DOT, STAR, SEMICOLON;
+terminal EQ, NOTEQ, LT, GT, LTEQ, GTEQ, PLUS, MINUS, DIVIDE, REMAINDER, CONCAT;
+terminal String ID, STRING;
+terminal java.math.BigInteger INT_VAL;
+terminal Double REAL_VAL;
+
+non terminal SQLStatement statement, command;
+non terminal CreateStatement create_statement;
+non terminal DropStatement drop_statement;
+non terminal SelectStatement select_statement;
+non terminal InsertStatement insert_statement;
+non terminal UpdateStatement update_statement;
+non terminal DeleteStatement delete_statement;
+non terminal Table table, table_reference;
+non terminal String alias, optional_alias, optional_outer;
+non terminal Boolean distinct, direction, if_exists, if_not_exists;
+non terminal Object optional_work;
+non terminal ArrayList<Column> definitions, column_definitions, column_list, insert_columns, assignments;
+non terminal Column column, column_definition, assignment;
+non terminal ColumnOptions column_options;
+non terminal ArrayList<Object> select_list;
+non terminal SelectItem select_item;
+non terminal FromClause from_clause, from_list;
+non terminal ArrayList<CompareTerm> expressions, group_clause, optional_expressions;
+non terminal ArrayList<OrderBy> order_clause, order_list;
+non terminal OrderBy ordering;
+non terminal ConditionalExpression where_clause, having_clause, condition;
+non terminal CompareTerm expression, disjunction, conjunction, factor, comparison;
+non terminal CompareTerm additive, multiplicative, concatenation, unary, scalar;
+non terminal Limit limit_clause;
+non terminal Long signed_integer;
+non terminal ArrayList<ArrayList<Object>> value_rows;
+
+start with statement;
+
+statement ::= command:c SEMICOLON {: RESULT = c; :};
+
+command ::= create_statement:c {: RESULT = c; :}
+          | drop_statement:c {: RESULT = c; :}
+          | select_statement:c {: RESULT = c; :}
+          | insert_statement:c {: RESULT = c; :}
+          | update_statement:c {: RESULT = c; :}
+          | delete_statement:c {: RESULT = c; :}
+          | BEGIN optional_work {: RESULT = new BeginStatement(); :}
+          | COMMIT optional_work {: RESULT = new CommitStatement(); :}
+          | END optional_work {: RESULT = new CommitStatement(); :}
+          | ROLLBACK optional_work {: RESULT = new RollbackStatement(); :};
+optional_work ::= WORK | TRANSACTION | ;
+
+table ::= ID:n {: RESULT = new Table(n); :};
+column ::= ID:n {: RESULT = new Column(n); :}
+         | ID:t DOT ID:n {: RESULT = new Column(n, new Table(t)); :};
+
+create_statement ::= CREATE TABLE if_not_exists:i table:t LPAREN definitions:c RPAREN
+    {: RESULT = new CreateStatement(t, c); RESULT.setIfNotExists(i); :};
+if_not_exists ::= IF NOT EXISTS {: RESULT = true; :} | {: RESULT = false; :};
+definitions ::= column_definitions:c {: RESULT = c; :}
+              | column_definitions:c COMMA PRIMARY KEY LPAREN ID:n RPAREN
+                {: RESULT = primaryKey(c, n); :};
+column_definitions ::= column_definition:c
+    {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
+    | column_definitions:l COMMA column_definition:c {: l.add(c); RESULT = l; :};
+column_definition ::= column:c INTEGER column_options:o {: RESULT = define(c, Column.INTEGER, null, o); :}
+    | column:c REAL column_options:o {: RESULT = define(c, Column.REAL, null, o); :}
+    | column:c TEXT column_options:o {: RESULT = define(c, Column.VARCHAR, 32767L, o); :}
+    | column:c VARCHAR LPAREN INT_VAL:n RPAREN column_options:o {: RESULT = define(c, Column.VARCHAR, n, o); :}
+    | column:c VARCHAR column_options:o {: RESULT = define(c, Column.VARCHAR, 32767L, o); :}
+    | column:c CHAR LPAREN INT_VAL:n RPAREN column_options:o {: RESULT = define(c, Column.CHAR, n, o); :}
+    | column:c CHAR column_options:o {: RESULT = define(c, Column.CHAR, 1L, o); :};
+column_options ::= PRIMARY KEY NOT NULL {: RESULT = new ColumnOptions(true, true); :}
+    | NOT NULL PRIMARY KEY {: RESULT = new ColumnOptions(true, true); :}
+    | PRIMARY KEY {: RESULT = new ColumnOptions(true, true); :}
+    | NOT NULL {: RESULT = new ColumnOptions(true, false); :}
+    | {: RESULT = new ColumnOptions(false, false); :};
+drop_statement ::= DROP TABLE if_exists:i table:t
+    {: RESULT = new DropStatement(t); RESULT.setIfExists(i); :};
+if_exists ::= IF EXISTS {: RESULT = true; :} | {: RESULT = false; :};
+
+select_statement ::= SELECT distinct:d select_list:s from_clause:f where_clause:w
+    group_clause:g having_clause:h order_clause:o limit_clause:l
+    {: RESULT = new SelectStatement(s, f, w, g, h, o, l, d); :};
+distinct ::= DISTINCT {: RESULT = true; :} | ALL {: RESULT = false; :} | {: RESULT = false; :};
+select_list ::= select_item:i {: RESULT = new ArrayList<Object>(); RESULT.add(i); :}
+    | select_list:l COMMA select_item:i {: l.add(i); RESULT = l; :};
+select_item ::= expression:e optional_alias:a {: RESULT = new SelectItem(e, a); :}
+    | STAR {: RESULT = SelectItem.star(null); :}
+    | ID:t DOT STAR {: RESULT = SelectItem.star(t); :};
+optional_alias ::= AS ID:a {: RESULT = a; :} | ID:a {: RESULT = a; :} | {: RESULT = null; :};
+alias ::= AS ID:a {: RESULT = a; :} | ID:a {: RESULT = a; :} | {: RESULT = null; :};
+table_reference ::= table:t alias:a {: t.setRangeVariable(a); RESULT = t; :};
+from_clause ::= FROM from_list:f {: RESULT = f; :} | {: RESULT = new FromClause(); :};
+from_list ::= table_reference:t {: RESULT = new FromClause().add(t, null, false); :}
+    | from_list:f COMMA table_reference:t {: RESULT = f.add(t, null, false); :}
+    | from_list:f CROSS JOIN table_reference:t {: RESULT = f.add(t, null, false); :}
+    | from_list:f JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, false); :}
+    | from_list:f INNER JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, false); :}
+    | from_list:f LEFT optional_outer JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, true); :};
+optional_outer ::= OUTER {: RESULT = ""; :} | {: RESULT = ""; :};
+where_clause ::= WHERE condition:c {: RESULT = c; :} | {: RESULT = null; :};
+group_clause ::= GROUP BY expressions:e {: RESULT = e; :}
+    | {: RESULT = new ArrayList<CompareTerm>(); :};
+having_clause ::= HAVING condition:c {: RESULT = c; :} | {: RESULT = null; :};
+order_clause ::= ORDER BY order_list:o {: RESULT = o; :} | {: RESULT = new ArrayList<OrderBy>(); :};
+order_list ::= ordering:o {: RESULT = new ArrayList<OrderBy>(); RESULT.add(o); :}
+    | order_list:l COMMA ordering:o {: l.add(o); RESULT = l; :};
+ordering ::= expression:e direction:d {: RESULT = new OrderBy(e, d); :};
+direction ::= DESC {: RESULT = true; :} | ASC {: RESULT = false; :} | {: RESULT = false; :};
+limit_clause ::= LIMIT signed_integer:n {: RESULT = new Limit(null, n); :}
+    | LIMIT signed_integer:n OFFSET signed_integer:o {: RESULT = new Limit(o, n); :}
+    | LIMIT signed_integer:o COMMA signed_integer:n {: RESULT = new Limit(o, n); :}
+    | {: RESULT = null; :};
+signed_integer ::= INT_VAL:n {: RESULT = limitInteger(n); :}
+    | MINUS INT_VAL:n {: RESULT = limitInteger(n.negate()); :}
+    | PLUS INT_VAL:n {: RESULT = limitInteger(n); :};
+
+condition ::= expression:e {: RESULT = predicate(e); :};
+disjunction ::= disjunction:l OR conjunction:r {: RESULT = new OrExpression(predicate(l), predicate(r)); :}
+    | conjunction:e {: RESULT = e; :};
+conjunction ::= conjunction:l AND factor:r {: RESULT = new AndExpression(predicate(l), predicate(r)); :}
+    | factor:e {: RESULT = e; :};
+factor ::= NOT factor:e {: RESULT = new NotExpression(predicate(e)); :}
+    | comparison:e {: RESULT = e; :};
+comparison ::= additive:l EQ additive:r {: RESULT = new Comparison(Comparison.EQ, l, r); :}
+    | additive:l NOTEQ additive:r {: RESULT = new Comparison(Comparison.NOTEQ, l, r); :}
+    | additive:l LT additive:r {: RESULT = new Comparison(Comparison.LT, l, r); :}
+    | additive:l GT additive:r {: RESULT = new Comparison(Comparison.GT, l, r); :}
+    | additive:l LTEQ additive:r {: RESULT = new Comparison(Comparison.LTEQ, l, r); :}
+    | additive:l GTEQ additive:r {: RESULT = new Comparison(Comparison.GTEQ, l, r); :}
+    | additive:l IS additive:r {: RESULT = new Comparison(Comparison.IS, l, r); :}
+    | additive:l IS NOT additive:r {: RESULT = new Comparison(Comparison.IS_NOT, l, r); :}
+    | additive:l LIKE additive:r {: RESULT = new Comparison(Comparison.LIKE, l, r); :}
+    | additive:l CLIKE additive:r {: RESULT = new Comparison(Comparison.CLIKE, l, r); :}
+    | additive:l NOT LIKE additive:r {: RESULT = new NotExpression(new Comparison(Comparison.LIKE, l, r)); :}
+    | additive:e IN LPAREN optional_expressions:v RPAREN {: RESULT = new InExpression(e, v); :}
+    | additive:e NOT IN LPAREN optional_expressions:v RPAREN {: RESULT = new NotExpression(new InExpression(e, v)); :}
+    | additive:e BETWEEN additive:l AND additive:r
+      {: RESULT = new AndExpression(new Comparison(Comparison.GTEQ, e, l), new Comparison(Comparison.LTEQ, e, r)); :}
+    | additive:e NOT BETWEEN additive:l AND additive:r
+      {: RESULT = new NotExpression(new AndExpression(new Comparison(Comparison.GTEQ, e, l), new Comparison(Comparison.LTEQ, e, r))); :}
+    | additive:e {: RESULT = e; :};
+
+expressions ::= expression:e {: RESULT = new ArrayList<CompareTerm>(); RESULT.add(e); :}
+    | expressions:l COMMA expression:e {: l.add(e); RESULT = l; :};
+optional_expressions ::= expressions:e {: RESULT = e; :} | {: RESULT = new ArrayList<CompareTerm>(); :};
+expression ::= disjunction:e {: RESULT = e; :};
+additive ::= additive:l PLUS multiplicative:r {: RESULT = new ArithmeticTerm("+", l, r); :}
+    | additive:l MINUS multiplicative:r {: RESULT = new ArithmeticTerm("-", l, r); :}
+    | multiplicative:e {: RESULT = e; :};
+multiplicative ::= multiplicative:l STAR concatenation:r {: RESULT = new ArithmeticTerm("*", l, r); :}
+    | multiplicative:l DIVIDE concatenation:r {: RESULT = new ArithmeticTerm("/", l, r); :}
+    | multiplicative:l REMAINDER concatenation:r {: RESULT = new ArithmeticTerm("%", l, r); :}
+    | concatenation:e {: RESULT = e; :};
+concatenation ::= concatenation:l CONCAT unary:r {: RESULT = new ArithmeticTerm("||", l, r); :}
+    | unary:e {: RESULT = e; :};
+unary ::= MINUS unary:e {: RESULT = e instanceof IntegerLiteral ? ((IntegerLiteral)e).negate() : new ArithmeticTerm("negate", e, null); :}
+    | PLUS unary:e {: RESULT = e; :}
+    | scalar:e {: RESULT = e; :};
+scalar ::= column:c {: RESULT = c; :}
+    | INT_VAL:n {: RESULT = new IntegerLiteral(n); :}
+    | REAL_VAL:n {: RESULT = new CompareTerm(n); :}
+    | STRING:s {: RESULT = new CompareTerm(s); :}
+    | NULL {: RESULT = new CompareTerm((Object) null); :}
+    | LPAREN expression:e RPAREN {: RESULT = e; :}
+    | ID:f LPAREN expression:e RPAREN {: RESULT = new AggregateTerm(f, e, false); :}
+    | ID:f LPAREN DISTINCT expression:e RPAREN {: RESULT = new AggregateTerm(f, e, true); :}
+    | ID:f LPAREN STAR RPAREN {: RESULT = new AggregateTerm(f, null, false); :};
+
+insert_statement ::= INSERT INTO table:t insert_columns:c VALUES value_rows:r
+    {: RESULT = InsertStatement.fromRows(t, c, r); :};
+insert_columns ::= LPAREN column_list:c RPAREN {: RESULT = c; :} | {: RESULT = new ArrayList<Column>(); :};
+column_list ::= column:c {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
+    | column_list:l COMMA column:c {: l.add(c); RESULT = l; :};
+value_rows ::= LPAREN expressions:e RPAREN
+    {: RESULT = new ArrayList<ArrayList<Object>>(); RESULT.add(new ArrayList<Object>(e)); :}
+    | value_rows:l COMMA LPAREN expressions:e RPAREN {: l.add(new ArrayList<Object>(e)); RESULT = l; :};
+update_statement ::= UPDATE table:t SET assignments:a where_clause:w {: RESULT = new UpdateStatement(t, a, w); :};
+assignments ::= assignment:a {: RESULT = new ArrayList<Column>(); RESULT.add(a); :}
+    | assignments:l COMMA assignment:a {: l.add(a); RESULT = l; :};
+assignment ::= column:c EQ expression:e {: c.setUpdateVal(e); RESULT = c; :};
+delete_statement ::= DELETE FROM table:t where_clause:w {: RESULT = new DeleteStatement(t, w); :};

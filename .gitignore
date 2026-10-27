@@ -1,0 +1,22 @@
+dbms/classes
+dbms/db
+.build/
+__pycache__/
+.local-db/
+/db/
+
+# Compiled output and generator backups
+*.class
+*.java~
+
+# Database files and diagnostics, including custom database directories
+*.jdb
+je.lck
+je.info*
+je.stat*.csv
+je.config*.csv
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
