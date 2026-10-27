@@ -31,6 +31,7 @@ public class sym {
   public static final int LPAREN = 55;
   public static final int NOT = 17;
   public static final int TEXT = 23;
+  public static final int PARAMETER = 76;
   public static final int EQ = 61;
   public static final int INTO = 25;
   public static final int SELECT = 2;

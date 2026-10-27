@@ -16,6 +16,7 @@ public class CompareTerm {
     public void setValType(int type) { valType = type; }
     public int getValType() { return valType; }
     public Object getValue() { return value; }
+    public SqlType getResultType() { return SqlType.of(getValue()); }
     public List<Column> getColumns() { return List.of(); }
     public List<AggregateTerm> getAggregates() { return List.of(); }
     public String toString() { return value == null ? "NULL" : value.toString(); }

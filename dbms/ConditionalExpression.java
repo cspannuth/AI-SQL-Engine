@@ -15,6 +15,7 @@ public abstract class ConditionalExpression extends CompareTerm {
     public ConditionalExpression getRight() { return right; }
     public final boolean isTrue() { return Boolean.TRUE.equals(evaluate()); }
     public abstract Boolean evaluate();
+    public SqlType getResultType() { return SqlType.INTEGER; }
 
     /** SQL exposes predicate values as 1, 0, or NULL in scalar contexts. */
     public final Object getValue() {

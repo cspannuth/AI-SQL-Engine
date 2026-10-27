@@ -5,7 +5,8 @@
 Complete the Java DBMS as the first milestone, aiming for SQLite compatibility.
 Keep the existing Berkeley DB backend, table/column schema, and statement classes.
 Favor readable methods and small supporting classes over a new framework.
-The database adapter, AI skills, and visualization application come afterward.
+A local read-only adapter foundation is now available alongside that engine work.
+AI skills and the visualization application remain later milestones.
 
 The engine now implements the previously missing execution paths and a broader
 query dialect. This establishes a working core; full SQLite compatibility still
@@ -47,14 +48,16 @@ alongside each engine improvement.
 2. **Query composition.** Add subqueries, correlated subqueries, EXISTS, compound
    SELECT operations, CTEs, INSERT ... SELECT, and broader join syntax.
 3. **Expressions and functions.** Add CASE, CAST, common scalar/string/date
-   functions, bind parameters, collations, and the remaining SQLite operators.
+   functions, collations, and the remaining SQLite operators. Positional value
+   binding, including LIMIT/OFFSET, is implemented; named parameters remain work.
 4. **Mutation compatibility.** Match SQLite conflict handling and primary-key
    update behavior; add supported ON CONFLICT and RETURNING forms. Define failed
    statement behavior for storage errors and add savepoints.
 5. **Planning and resource use.** Add indexes and index-aware access paths,
    explainable query plans, execution budgets, and streaming where possible.
-   Simple unordered LIMIT queries stop early; sorts, groups, DISTINCT, and
-   mutations currently materialize data in memory.
+   Adapter reads now have scan/work budgets and cooperative deadlines. Simple
+   unordered previews stop early; sorts, groups, DISTINCT, and mutations still
+   materialize data in memory. Hard isolation and broader streaming remain work.
 6. **Reliability.** Extend property-based/differential coverage, fault injection,
    large-dataset checks, and recovery tests. Define session/concurrency guarantees
    before exposing multiple connections; the current engine owns one serialized
@@ -71,18 +74,30 @@ where ordering matters. Do not compare SQL text or unordered row traversal.
 
 ## 2. Build the database adapter
 
-Build on `DBMS.execute(String)` and `QueryResult`; keep CLI formatting out of the
-integration. Add schema discovery, capability discovery, parameter binding, and
-bounded read execution. Start with one local interface. Add HTTP or MCP transport
-when there is a consumer.
+The first local implementation is available as `DatabaseAdapter`. It provides
+schema/capability discovery, fixed caller/table authorization, positional bindings,
+bounded read-only queries, logical result types, structured errors, and immutable
+result artifacts with count/byte/TTL retention. See [ADAPTER.md](ADAPTER.md) for
+usage and the tested contract. Results are in memory and private to one adapter
+instance; no model or transport is required.
+
+`DatabaseClient` makes the interface executable through persistent terminal
+sessions, one-shot commands, and JSON Lines requests/responses. It accepts actual
+SQL and bound values, configurable budgets, fixed table policies, and schema-only
+sessions. Result IDs can be retrieved while the owning session remains open.
+See [CLIENT.md](CLIENT.md) for the client contract.
+
+Continue building on `DBMS.execute` and `QueryResult`; keep CLI formatting out of
+the integration. Add HTTP or MCP transport when there is a consumer.
 
 Validate statements and identifiers through the parser/catalog. Enforce caller,
 table, and operation permissions in application code. Keep one engine owner until
 separate sessions and transaction isolation are implemented.
 
-Extend result envelopes with logical column types, query/result IDs, executed
-SQL, completeness, effective limits, timing, and snapshot/freshness information.
-Store authorized immutable result artifacts for follow-up questions.
+Result envelopes include logical types, query/result IDs, SQL and bound values,
+completeness, effective limits, timing, and capture/expiry times. Remaining work
+includes database snapshot/freshness versions, optional durable artifact history,
+and authenticated multi-user sessions.
 
 Gate: integration tests cover success, SQL errors, access restrictions, nulls,
 truncation, execution limits, and database-directory isolation without a model.
@@ -97,6 +112,12 @@ The workflow is question -> schema/context -> SQL -> validated tool execution ->
 result inspection -> evidence-based answer. Preserve the question, SQL, result
 ID, filters, and assumptions for follow-up requests. Requery when the scope or
 freshness requirement changes. Never invent database output.
+
+Give the query-drafting stage schema and metric definitions first; table rows
+are optional targeted context. That stage returns SQL plus parameters. Trusted
+application code routes execution through the adapter/client, and the DBMS returns
+the actual results to the answer or visualization stage. Metadata discovery must
+not implicitly query table contents.
 
 Repository guidance belongs in `AGENTS.md`; reusable Codex workflows belong in
 `.agents/skills/<name>/SKILL.md`. A custom application must load the workflow

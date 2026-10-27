@@ -216,6 +216,11 @@ public class Column extends CompareTerm {
     }
 
     public CompareTerm getExpression() { return expression; }
+
+    public SqlType getResultType() {
+        if (expression != null) { return expression.getResultType(); }
+        return type == INTEGER ? SqlType.INTEGER : type == REAL ? SqlType.REAL : SqlType.TEXT;
+    }
     
     /**
      * Returns the maximum print width for values from this column.

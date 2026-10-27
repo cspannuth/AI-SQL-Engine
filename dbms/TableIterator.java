@@ -49,6 +49,7 @@ public class TableIterator implements AutoCloseable {
     }
 
     private boolean advance() {
+        QueryBudget.check();
         if (cursor == null) { throw new IllegalStateException("This iterator is closed"); }
         snapshot = null;
         if (exhausted) { return false; }
@@ -56,6 +57,7 @@ public class TableIterator implements AutoCloseable {
                 : cursor.getNext(key, value, null);
         beforeFirst = false;
         positioned = status == OperationStatus.SUCCESS;
+        if (positioned) { QueryBudget.scannedRow(); }
         exhausted = !positioned;
         return positioned;
     }

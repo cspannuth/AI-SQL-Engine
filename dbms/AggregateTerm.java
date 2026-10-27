@@ -23,6 +23,12 @@ public class AggregateTerm extends CompareTerm {
     }
 
     public Object getValue() { return value; }
+    public SqlType getResultType() {
+        if (function.equals("COUNT")) { return SqlType.INTEGER; }
+        if (function.equals("AVG") || function.equals("TOTAL")) { return SqlType.REAL; }
+        if (isExtremum()) { return argument.getResultType(); }
+        return SqlType.NUMERIC;
+    }
     public void useState(State state) { value = state.finish(); }
     public List<Column> getColumns() { return argument == null ? List.of() : argument.getColumns(); }
     public List<AggregateTerm> getAggregates() { return List.of(this); }
@@ -47,13 +53,18 @@ public class AggregateTerm extends CompareTerm {
         public void addCurrentRow() {
             extremeChanged = false;
             Object current = argument == null ? 1L : argument.getValue();
-            if (current == null || (seen != null && !seen.add(SqlValues.key(current)))) { return; }
+            if (current == null) { return; }
+            if (seen != null) {
+                if (!seen.add(SqlValues.key(current))) { return; }
+                QueryBudget.reserveBytes(QueryBudget.payloadBytes(current));
+            }
             count++;
             if (function.equals("COUNT")) { return; }
             if (function.equals("MIN") || function.equals("MAX")) {
                 int order = extreme == null ? 0 : SqlValues.compare(current, extreme);
                 if (extreme == null || (function.equals("MIN") ? order < 0 : order > 0)) {
                     extreme = current;
+                    QueryBudget.reserveBytes(QueryBudget.payloadBytes(current));
                     extremeChanged = true;
                 }
                 return;

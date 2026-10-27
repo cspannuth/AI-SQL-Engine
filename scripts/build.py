@@ -43,6 +43,7 @@ def sanitize_generated_metadata(directory):
         else:
             text = re.sub(r"(?m)^// (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) [^\n]*\n", "", text)
             text = re.sub(r"(?m)^  \* @version [^\n]*\n", "", text)
+        text = "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
         path.write_text(text, encoding="utf-8")
 
 
@@ -55,6 +56,10 @@ def build(destination, generated=None, tests=False):
         sources += sorted(Path(generated).glob("*.java"))
     if tests:
         sources += sorted((ROOT / "tests").glob("*.java"))
+    # All project classes use the default package. Remove old compiled classes
+    # so deleted or renamed entry points cannot remain executable after a build.
+    for compiled in destination.glob("*.class"):
+        compiled.unlink()
     subprocess.run(
         ["javac", "-encoding", "UTF-8", "-cp", str(LIB / "*"), "-d",
          str(destination), *map(str, sources)], cwd=ROOT, check=True,

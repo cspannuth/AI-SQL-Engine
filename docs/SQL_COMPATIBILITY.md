@@ -21,6 +21,7 @@ remain in place.
 | Result shaping | DISTINCT, GROUP BY, HAVING, ORDER BY ASC/DESC; output aliases and ordinals in GROUP BY/ORDER BY; HAVING aliases |
 | Aggregates | COUNT(*), COUNT(expr), SUM, AVG, TOTAL, MIN, MAX; DISTINCT arguments; null and empty-group handling |
 | Scalar operations | +, -, *, /, %, unary signs, concatenation; predicates return 1/0/NULL; scalar truth conditions |
+| Parameters | Positional ? values in scalar expressions and LIMIT/OFFSET; typed binding through the Java API |
 | Limits | LIMIT count, LIMIT count OFFSET offset, LIMIT offset,count; negative count is unbounded; negative offset becomes zero |
 | Lexing | Case-insensitive unquoted names and keywords, underscore identifiers, double-quoted identifiers, doubled single quotes, line/block comments |
 | CLI | Multiple statements per line, multiline statements, q to exit, continued operation after a SQL error |
@@ -54,7 +55,7 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
 - **Constraints:** PRIMARY KEY and NOT NULL are implemented. Defaults, UNIQUE,
   CHECK, foreign keys, AUTOINCREMENT, and ALTER TABLE remain work.
 - **Query language:** subqueries, EXISTS, UNION/INTERSECT/EXCEPT, CTEs, window
-  functions, CASE, CAST, general scalar/date functions, bind parameters,
+  functions, CASE, CAST, general scalar/date functions, named parameters,
   NATURAL/USING/RIGHT/FULL joins, and custom collations remain work. Unsupported
   syntax fails rather than silently ignoring a clause.
 - **Writes:** INSERT ... SELECT, ON CONFLICT variants, RETURNING, and savepoints
@@ -66,8 +67,10 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
 - **Execution:** one serialized database session owns process-wide state.
   Concurrency across independent SQL sessions is not implemented. Queries use
   scans and nested-loop joins; sorting, grouping, DISTINCT, and mutations keep
-  working data in memory. No indexes, planner, cancellation, or runtime resource
-  budget is advertised.
+  working data in memory. Indexes and a query planner remain work. The local
+  adapter applies scan/work budgets, output caps, interruption checks, and
+  cooperative deadlines; direct engine calls remain unlimited by default. See
+  [ADAPTER.md](ADAPTER.md) for guarantees and limits.
 
 ## Verification
 

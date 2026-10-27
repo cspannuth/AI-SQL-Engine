@@ -6,8 +6,9 @@ Improve and validate the existing Java DBMS, then build an application that can
 answer questions using SQL results and create reproducible data visualizations.
 Complete the DBMS as the first project milestone, aiming for SQLite compatibility.
 Preserve its Berkeley DB storage, table/column schema, and statement-based Java
-structure. Keep code readable and simple. Engine features and correctness come
-before the AI adapter, skills, or visualization application. Track compatibility
+structure. Keep code readable and simple. Maintain the local read-only adapter
+alongside the engine; AI skills and visualization come after a reliable database
+interface. Track compatibility
 explicitly; do not claim full SQLite parity until the remaining gaps are closed.
 
 These are shared repository instructions for coding agents. Reusable task
@@ -21,6 +22,10 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `dbms/sql.cup`, `sql.flex`: maintained CUP and JFlex specifications.
 - `dbms/Parser.java`, `Lexer.java`, `sym.java`: generated parser and lexer artifacts.
 - `dbms/*Statement.java`: statement execution and SQL statement models.
+- `dbms/DatabaseAdapter.java`: local read-only policy, metadata, query, and artifact API.
+- `dbms/DatabaseClient.java`, `AdapterProtocol.java`: persistent terminal and JSON Lines client.
+- `dbms/Json.java`: bounded JSON protocol parsing and DTO serialization.
+- `dbms/QueryBudget.java`, `QueryLimits.java`: optional bounded execution context.
 - `dbms/Catalog.java`, `Table.java`: persisted schema and table handles.
 - `dbms/InsertRow.java`, `TableIterator.java`, `RowInput.java`, `RowOutput.java`:
   row serialization, scans, and decoding.
@@ -79,7 +84,11 @@ and double-quoted identifiers are supported.
 
 Keep the flow explicit: user question -> schema and metric context -> proposed
 SQL -> application policy and semantic validation -> DBMS -> typed result ->
-answer and optional chart. These interfaces are planned, not implemented.
+answer and optional chart. The local database adapter is implemented; model and
+network integrations remain planned. See [docs/ADAPTER.md](docs/ADAPTER.md).
+The process interface is documented in [docs/CLIENT.md](docs/CLIENT.md). Preserve
+schema-only operation restrictions so a drafting agent can receive metadata
+without table rows. SQL execution remains an explicit deterministic request.
 
 - Keep the Java engine independent of model providers and visualization packages.
   Start with one thin adapter; add HTTP or MCP transport when there is a consumer.
@@ -89,7 +98,10 @@ answer and optional chart. These interfaces are planned, not implemented.
 - Validate identifiers against the catalog. Add parameter binding or typed literal
   construction; do not concatenate untrusted values into SQL.
 - Enforce row, byte, scan/time, and request limits in execution. SQL LIMIT controls
-  returned rows; the current materializing executor still needs separate work limits.
+  returned rows. Adapter calls install QueryBudget for scan/working-data limits
+  and cooperative deadlines; ordinary engine calls remain unlimited by default.
+- Keep adapter policies fixed per caller, bind parameter values as AST nodes, and
+  preserve the distinction between truncated previews and complete query results.
 - Keep one controlled engine owner and serialize requests initially. Static state
   is not a verified concurrent session or transaction implementation.
 - Return column names and types, rows, returned-row count, completeness/truncation,

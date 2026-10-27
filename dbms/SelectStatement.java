@@ -54,6 +54,7 @@ public class SelectStatement extends SQLStatement {
         int representativeAggregate = -1;
 
         void prepare() {
+            QueryBudget.check();
             Set<String> names = new HashSet<>();
             for (Table table : from.tables) {
                 table.open();
@@ -135,7 +136,10 @@ public class SelectStatement extends SQLStatement {
             if (having != null && !grouped) {
                 throw new IllegalArgumentException("HAVING requires grouping or an aggregate");
             }
-            if (grouped && groupBy.isEmpty()) { groups.put(List.of(), new Group()); }
+            if (grouped && groupBy.isEmpty()) {
+                QueryBudget.reserveWorkingRow(8L * aggregates.size());
+                groups.put(List.of(), new Group());
+            }
         }
 
         void register(CompareTerm expression) {
@@ -173,6 +177,7 @@ public class SelectStatement extends SQLStatement {
         }
 
         void scan(int depth) {
+            QueryBudget.check();
             if (enoughRows()) { return; }
             if (depth == iterators.size()) {
                 if (getWhere() == null || getWhere().isTrue()) { consume(); }
@@ -195,32 +200,46 @@ public class SelectStatement extends SQLStatement {
         }
 
         boolean enoughRows() {
-            if (limit == null) { return false; }
-            if (limit.getMax() == 0) { return true; }
+            if (limit != null && limit.getMax() == 0) { return true; }
+            long rowsNeeded = QueryBudget.resultRowLimit();
+            // One extra row proves whether an adapter preview is truncated.
+            if (rowsNeeded < Long.MAX_VALUE) { rowsNeeded++; }
+            if (limit != null) { rowsNeeded = Math.min(rowsNeeded, limit.getMax()); }
+            long offset = limit == null ? 0 : limit.getOffset();
             // Sorting, grouping, and DISTINCT may still need every input row.
             return !grouped && !distinct && orderBy.isEmpty()
-                    && rows.size() >= limit.getOffset()
-                    && rows.size() - limit.getOffset() >= limit.getMax();
+                    && rows.size() >= offset && rows.size() - offset >= rowsNeeded;
         }
 
         void consume() {
             if (!grouped) { emit(); return; }
             List<Object> key = new ArrayList<>();
             for (CompareTerm expression : groupBy) { key.add(SqlValues.key(expression.getValue())); }
-            Group group = groups.computeIfAbsent(key, ignored -> new Group());
+            Group group = groups.get(key);
+            if (group == null) {
+                QueryBudget.reserveWorkingRow(QueryBudget.payloadBytes(key) + 8L * aggregates.size());
+                group = new Group();
+                groups.put(key, group);
+            }
             for (AggregateTerm.State state : group.states) { state.addCurrentRow(); }
             if (group.representative == null || (representativeAggregate >= 0
                     && group.states.get(representativeAggregate).changedRepresentative())) {
                 group.representative = new ArrayList<>();
-                for (TableIterator iterator : iterators) { group.representative.add(iterator.getRow()); }
+                for (TableIterator iterator : iterators) {
+                    Object[] row = iterator.getRow();
+                    QueryBudget.reserveBytes(QueryBudget.payloadBytes(Arrays.asList(row)));
+                    group.representative.add(row);
+                }
             }
         }
 
         void emit() {
+            QueryBudget.check();
             List<Object> values = new ArrayList<>();
             List<Object> sortKeys = new ArrayList<>();
             for (SelectItem item : output) { values.add(item.expression.getValue()); }
             for (OrderBy order : orderBy) { sortKeys.add(order.expression.getValue()); }
+            QueryBudget.reserveWorkingRow(QueryBudget.payloadBytes(values) + QueryBudget.payloadBytes(sortKeys));
             rows.add(new ResultRow(values, sortKeys));
         }
 
@@ -240,11 +259,14 @@ public class SelectStatement extends SQLStatement {
                 rows.removeIf(row -> {
                     List<Object> key = new ArrayList<>();
                     for (Object value : row.values) { key.add(SqlValues.key(value)); }
-                    return !seen.add(key);
+                    boolean duplicate = !seen.add(key);
+                    if (!duplicate) { QueryBudget.reserveBytes(QueryBudget.payloadBytes(key)); }
+                    return duplicate;
                 });
             }
             if (!orderBy.isEmpty()) {
                 rows.sort((a, b) -> {
+                    QueryBudget.check();
                     for (int i = 0; i < orderBy.size(); i++) {
                         int comparison = SqlValues.compare(a.sortKeys.get(i), b.sortKeys.get(i));
                         if (comparison != 0) { return orderBy.get(i).descending ? -comparison : comparison; }
@@ -254,12 +276,26 @@ public class SelectStatement extends SQLStatement {
             }
             int start = limit == null ? 0 : (int) Math.min(rows.size(), limit.getOffset());
             long count = limit == null ? rows.size() : Math.min(rows.size() - start, limit.getMax());
-            int end = start + (int) count;
-            List<List<Object>> values = new ArrayList<>();
-            for (int i = start; i < end; i++) { values.add(rows.get(i).values); }
             List<String> labels = new ArrayList<>();
-            for (SelectItem item : output) { labels.add(item.label()); }
-            return new QueryResult(labels, values);
+            List<SqlType> types = new ArrayList<>();
+            for (SelectItem item : output) {
+                labels.add(item.label());
+                types.add(item.expression.getResultType());
+            }
+            int end = start + (int) Math.min(count, QueryBudget.resultRowLimit());
+            String truncated = count > QueryBudget.resultRowLimit() ? "ROWS" : null;
+            long resultBytes = 8 + QueryBudget.payloadBytes(labels) + QueryBudget.payloadBytes(types);
+            if (resultBytes > QueryBudget.resultByteLimit()) { throw new QueryBudget.Exceeded("result header bytes"); }
+            List<List<Object>> values = new ArrayList<>();
+            for (int i = start; i < end; i++) {
+                QueryBudget.check();
+                List<Object> row = rows.get(i).values;
+                long bytes = QueryBudget.payloadBytes(row);
+                if (bytes > QueryBudget.resultByteLimit() - resultBytes) { truncated = "BYTES"; break; }
+                resultBytes += bytes;
+                values.add(row);
+            }
+            return new QueryResult(labels, types, values, truncated);
         }
 
         class Group {

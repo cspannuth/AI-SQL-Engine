@@ -16,7 +16,10 @@ public class ArithmeticTerm extends CompareTerm {
         Object a = left.getValue();
         Object b = right == null ? null : right.getValue();
         if (a == null || (right != null && b == null)) { return null; }
-        if (operator.equals("||")) { return a.toString() + b.toString(); }
+        if (operator.equals("||")) {
+            QueryBudget.checkValueSize(QueryBudget.payloadBytes(a) + QueryBudget.payloadBytes(b));
+            return a.toString() + b.toString();
+        }
         Number x = SqlValues.number(a);
         Number y = b == null ? null : SqlValues.number(b);
         boolean integral = !(x instanceof Double) && (y == null || !(y instanceof Double));
@@ -58,6 +61,8 @@ public class ArithmeticTerm extends CompareTerm {
         if (right != null) { columns.addAll(right.getColumns()); }
         return columns;
     }
+
+    public SqlType getResultType() { return operator.equals("||") ? SqlType.TEXT : SqlType.NUMERIC; }
 
     public List<AggregateTerm> getAggregates() {
         List<AggregateTerm> aggregates = new ArrayList<>(left.getAggregates());

@@ -60,3 +60,46 @@ operations note during compilation.
 For Java callers, `DBMS.init(Path)` opens a database and `DBMS.execute(String)`
 returns a `QueryResult` containing column labels, typed row values, and an affected
 row count. SQL failures throw exceptions. Call `DBMS.shutdown()` when finished.
+
+## Database client and read-only adapter
+
+`DatabaseAdapter` adds schema discovery, a fixed caller/table policy, positional
+parameters, bounded SELECT execution, logical result types, and private result
+IDs with expiry. The engine remains a single serialized session.
+
+Open a persistent client against your existing database:
+
+```powershell
+java -cp ".build/classes;dbms/lib/*" DatabaseClient ".local-db"
+```
+
+Inspect the schema and enter your own SELECT queries. These commands assume the
+`sales` table above; use `.tables` to find your actual table names:
+
+```text
+.tables
+.schema sales
+SELECT * FROM sales;
+.params ["books"]
+SELECT * FROM sales WHERE category = ?;
+.result <printed-result-id>
+.quit
+```
+
+For a one-shot query or programmatic integration:
+
+```powershell
+java -cp ".build/classes;dbms/lib/*" DatabaseClient ".local-db" --query "SELECT * FROM sales;" --json
+java -cp ".build/classes;dbms/lib/*" DatabaseClient ".local-db" --json --allow-table sales
+```
+
+The second command accepts JSON Lines requests over stdin and returns structured
+responses on stdout. Add `--schema-only` to permit schema discovery without rows.
+Use the same database directory as `DBMS`; `.local-db`, `db`, and `dbms/db` are
+separate databases. The client does not seed tables or initialize missing folders.
+
+Read the [client guide](docs/CLIENT.md) for commands, JSON operations, permissions,
+and configurable ceilings, or the [adapter API guide](docs/ADAPTER.md) for Java
+usage. Results use the adapter's normal limits, without a fixed sample-row query.
+Artifacts remain available within a session until expiry or eviction and disappear
+when it closes. The engine remains read-only through this interface.

@@ -4,27 +4,40 @@ import java.util.*;
 /** Typed statement output. Only the CLI is responsible for printing it. */
 public final class QueryResult {
     private final List<String> columns;
+    private final List<SqlType> columnTypes;
     private final List<List<Object>> rows;
     private final int affectedRows;
     private final String message;
+    private final String truncationReason;
 
     public QueryResult(List<String> columns, List<List<Object>> rows) {
+        this(columns, Collections.nCopies(columns.size(), SqlType.UNKNOWN), rows, null);
+    }
+
+    public QueryResult(List<String> columns, List<SqlType> types, List<List<Object>> rows,
+            String truncationReason) {
         this.columns = List.copyOf(columns);
+        this.columnTypes = List.copyOf(types);
+        if (columns.size() != types.size()) { throw new IllegalArgumentException("Column type count mismatch"); }
         List<List<Object>> copied = new ArrayList<>();
         for (List<Object> row : rows) {
+            if (row.size() != columns.size()) { throw new IllegalArgumentException("Result row width mismatch"); }
             // List.copyOf rejects SQL nulls.
             copied.add(Collections.unmodifiableList(new ArrayList<>(row)));
         }
         this.rows = Collections.unmodifiableList(copied);
         this.affectedRows = 0;
         this.message = null;
+        this.truncationReason = truncationReason;
     }
 
     private QueryResult(String message, int affectedRows) {
         this.columns = List.of();
+        this.columnTypes = List.of();
         this.rows = List.of();
         this.affectedRows = affectedRows;
         this.message = message;
+        this.truncationReason = null;
     }
 
     public static QueryResult changed(String message, int affectedRows) {
@@ -32,6 +45,9 @@ public final class QueryResult {
     }
 
     public List<String> getColumns() { return columns; }
+    public List<SqlType> getColumnTypes() { return columnTypes; }
+    public boolean isTruncated() { return truncationReason != null; }
+    public String getTruncationReason() { return truncationReason; }
     public List<List<Object>> getRows() { return rows; }
     public int getAffectedRows() { return affectedRows; }
 

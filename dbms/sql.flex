@@ -9,6 +9,7 @@ import java.util.Locale;
 %char
 %state COMMENT
 %{
+    private int nextParameter;
     private Symbol token(int kind) {
         return new Symbol(kind, yychar, yychar + yylength());
     }
@@ -121,6 +122,7 @@ QuotedIdentifier = \"([^\"\r\n]|\"\")*\"
     "/" { return token(sym.DIVIDE); }
     "%" { return token(sym.REMAINDER); }
     "||" { return token(sym.CONCAT); }
+    "?" { return token(sym.PARAMETER, nextParameter++); }
     . { throw new InvalidSyntaxException("Illegal character at " + yychar + ": " + yytext()); }
 }
 <COMMENT> {

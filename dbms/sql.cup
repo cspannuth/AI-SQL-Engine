@@ -2,6 +2,21 @@ import java.util.*;
 import java_cup.runtime.*;
 
 parser code {:
+    private final List<ParameterTerm> parameters = new ArrayList<>();
+
+    public ParameterTerm parameter(int index) {
+        ParameterTerm term = new ParameterTerm(index);
+        parameters.add(term);
+        return term;
+    }
+
+    public void bindParameters(List<?> values) {
+        if (values.size() != parameters.size()) {
+            throw new IllegalArgumentException("Expected " + parameters.size() + " parameter value(s)");
+        }
+        for (ParameterTerm parameter : parameters) { parameter.bind(values.get(parameter.getIndex())); }
+    }
+
     public void syntax_error(Symbol token) {
         throw new InvalidSyntaxException("Syntax error at character " + token.left + ": " + token.value);
     }
@@ -55,6 +70,7 @@ terminal EQ, NOTEQ, LT, GT, LTEQ, GTEQ, PLUS, MINUS, DIVIDE, REMAINDER, CONCAT;
 terminal String ID, STRING;
 terminal java.math.BigInteger INT_VAL;
 terminal Double REAL_VAL;
+terminal Integer PARAMETER;
 
 non terminal SQLStatement statement, command;
 non terminal CreateStatement create_statement;
@@ -81,6 +97,7 @@ non terminal CompareTerm expression, disjunction, conjunction, factor, compariso
 non terminal CompareTerm additive, multiplicative, concatenation, unary, scalar;
 non terminal Limit limit_clause;
 non terminal Long signed_integer;
+non terminal CompareTerm limit_value;
 non terminal ArrayList<ArrayList<Object>> value_rows;
 
 start with statement;
@@ -157,10 +174,12 @@ order_list ::= ordering:o {: RESULT = new ArrayList<OrderBy>(); RESULT.add(o); :
     | order_list:l COMMA ordering:o {: l.add(o); RESULT = l; :};
 ordering ::= expression:e direction:d {: RESULT = new OrderBy(e, d); :};
 direction ::= DESC {: RESULT = true; :} | ASC {: RESULT = false; :} | {: RESULT = false; :};
-limit_clause ::= LIMIT signed_integer:n {: RESULT = new Limit(null, n); :}
-    | LIMIT signed_integer:n OFFSET signed_integer:o {: RESULT = new Limit(o, n); :}
-    | LIMIT signed_integer:o COMMA signed_integer:n {: RESULT = new Limit(o, n); :}
+limit_clause ::= LIMIT limit_value:n {: RESULT = new Limit(null, n); :}
+    | LIMIT limit_value:n OFFSET limit_value:o {: RESULT = new Limit(o, n); :}
+    | LIMIT limit_value:o COMMA limit_value:n {: RESULT = new Limit(o, n); :}
     | {: RESULT = null; :};
+limit_value ::= signed_integer:n {: RESULT = new CompareTerm(n); :}
+    | PARAMETER:n {: RESULT = parser.parameter(n); :};
 signed_integer ::= INT_VAL:n {: RESULT = limitInteger(n); :}
     | MINUS INT_VAL:n {: RESULT = limitInteger(n.negate()); :}
     | PLUS INT_VAL:n {: RESULT = limitInteger(n); :};
@@ -208,6 +227,7 @@ unary ::= MINUS unary:e {: RESULT = e instanceof IntegerLiteral ? ((IntegerLiter
     | PLUS unary:e {: RESULT = e; :}
     | scalar:e {: RESULT = e; :};
 scalar ::= column:c {: RESULT = c; :}
+    | PARAMETER:n {: RESULT = parser.parameter(n); :}
     | INT_VAL:n {: RESULT = new IntegerLiteral(n); :}
     | REAL_VAL:n {: RESULT = new CompareTerm(n); :}
     | STRING:s {: RESULT = new CompareTerm(s); :}

@@ -25,15 +25,26 @@ public class Catalog {
 
     /** Resolve identifiers without case sensitivity, including legacy names. */
     public static String findName(String requested) {
+        for (String name : listTableNames()) {
+            if (name.equalsIgnoreCase(requested)) { return name; }
+        }
+        return null;
+    }
+
+    public static java.util.List<String> listTableNames() {
+        java.util.List<String> names = new ArrayList<>();
         DatabaseEntry key = new DatabaseEntry();
         DatabaseEntry value = new DatabaseEntry();
         try (Cursor cursor = catalogDB.openCursor(DBMS.getTransaction(), null)) {
             while (cursor.getNext(key, value, null) == OperationStatus.SUCCESS) {
+                QueryBudget.check();
                 String name = new String(key.getData(), key.getOffset(), key.getSize(), StandardCharsets.UTF_8);
-                if (name.equalsIgnoreCase(requested)) { return name; }
+                QueryBudget.reserveBytes(QueryBudget.payloadBytes(name));
+                names.add(name);
             }
         }
-        return null;
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        return names;
     }
 
     public static OperationStatus putMetadata(Table table) {

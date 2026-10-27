@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from build import build, generate
+from client_checks import check_client
 
 
 def database_hashes():
@@ -220,6 +221,9 @@ def main():
             classpath = build(workspace / "classes", generated=generated, tests=True)
             subprocess.run(["java", "-cp", classpath, "EngineTests", str(workspace / "engine")],
                            cwd=ROOT, check=True, timeout=60)
+            subprocess.run(["java", "-cp", classpath, "AdapterTests", str(workspace / "adapter")],
+                           cwd=ROOT, check=True, timeout=60)
+            check_client(classpath, workspace / "client", workspace, run_engine)
             compare_sqlite(classpath, workspace / "comparison")
             crash_recovery(classpath, workspace / "recovery")
             cli_checks(classpath, workspace / "cli")

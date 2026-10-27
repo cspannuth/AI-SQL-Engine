@@ -57,11 +57,23 @@ public class DBMS {
 
     /** Parse and execute one SQL statement. */
     public static synchronized QueryResult execute(String sql) {
+        return execute(sql, List.of());
+    }
+
+    public static synchronized QueryResult execute(String sql, List<?> parameters) {
         if (env == null) { throw new IllegalStateException("The database is not open"); }
+        SQLStatement statement = parse(sql, parameters);
+        statement.execute();
+        return statement.getResult();
+    }
+
+    /** Parse separately so an adapter can authorize the AST before execution. */
+    static SQLStatement parse(String sql, List<?> parameters) {
         try {
-            SQLStatement statement = (SQLStatement) new Parser(new Lexer(new StringReader(sql))).parse().value;
-            statement.execute();
-            return statement.getResult();
+            Parser parser = new Parser(new Lexer(new StringReader(sql)));
+            SQLStatement statement = (SQLStatement) parser.parse().value;
+            parser.bindParameters(parameters);
+            return statement;
         } catch (RuntimeException e) { throw e; }
         catch (Exception e) {
             throw new IllegalArgumentException("Could not parse SQL: " + e.getMessage(), e);
