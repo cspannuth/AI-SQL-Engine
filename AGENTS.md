@@ -27,6 +27,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `dbms/Json.java`: bounded JSON protocol parsing and DTO serialization.
 - `dbms/QueryBudget.java`, `QueryLimits.java`: optional bounded execution context.
 - `dbms/Catalog.java`, `Table.java`: persisted schema and table handles.
+- `dbms/RowIdentity.java`: version 2 physical keys, ID allocation, and ordinary
+  primary-key uniqueness. Earlier storage versions retain their key encoding.
 - `dbms/InsertRow.java`, `TableIterator.java`, `RowInput.java`, `RowOutput.java`:
   row serialization, scans, and decoding.
 - `dbms/lib/`: bundled Berkeley DB JE 7.5.11, CUP, and JFlex JARs.
@@ -42,6 +44,9 @@ HAVING, ordering, scalar expressions, predicates, and limits. Consult
 [docs/SQL_COMPATIBILITY.md](docs/SQL_COMPATIBILITY.md) for supported syntax and
 remaining differences from SQLite. Results are returned through `QueryResult`;
 SQL failures propagate to the caller rather than only printing an error.
+New tables use internal row IDs; exact INTEGER PRIMARY KEY declarations alias
+them. Preserve version 0/1 storage behavior. The format and compatibility rules
+are documented in [docs/ROW_IDENTITY.md](docs/ROW_IDENTITY.md).
 
 ## Development and verification
 

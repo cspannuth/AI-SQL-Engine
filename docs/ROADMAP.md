@@ -32,6 +32,9 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 - Typed result values and exceptions independently of CLI printing.
 - Versioned UTF-8 schemas for new tables, 64-bit new INTEGER columns, and reading
   and updating tables in the original single-byte/32-bit format.
+- Internal row IDs for new tables, INTEGER PRIMARY KEY allocation, hidden ID
+  aliases, and independent ordinary primary-key constraints. Existing unversioned
+  and version 1 tables retain their original keys. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
 - A reproducible local build, maintained CUP/JFlex specifications, isolated engine
   regressions, direct SQLite comparisons, restart tests, and process-crash recovery.
 
@@ -41,10 +44,11 @@ alongside each engine improvement.
 
 ### Remaining engine work before claiming SQLite compatibility
 
-1. **Schema and type semantics.** Resolve the legacy implicit first-column primary
-   key versus SQLite rowid tables, generated integer keys, type affinity, defaults,
+1. **Schema and type semantics.** Row identity and generated integer keys are now
+   implemented for new tables. Continue with type affinity, defaults,
    UNIQUE/CHECK/foreign-key constraints, composite keys, and ALTER TABLE. Introduce
-   explicit format migrations where required; preserve existing database files.
+   explicit format migrations where required, including opt-in conversion of old
+   tables to row IDs; preserve existing database files.
 2. **Query composition.** Add subqueries, correlated subqueries, EXISTS, compound
    SELECT operations, CTEs, INSERT ... SELECT, and broader join syntax.
 3. **Expressions and functions.** Add CASE, CAST, common scalar/string/date

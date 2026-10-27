@@ -14,6 +14,9 @@ public class TableIterator implements AutoCloseable {
     private Object[] snapshot;
     private int numTuples;
 
+    /** Scan all rows for storage-level validation, without a SQL filter. */
+    public TableIterator(Table table) { this(null, table, false); }
+
     public TableIterator(SQLStatement statement, Table table, boolean evalWhere) {
         this.table = table;
         if (table.getDB() == null) { throw new IllegalStateException("Table is not open: " + table); }
@@ -63,9 +66,12 @@ public class TableIterator implements AutoCloseable {
     }
 
     public Object getColumnVal(int index) {
-        Column column = table.getColumn(index);
         if (snapshot != null) { return snapshot[index]; }
         if (!positioned) { throw new IllegalStateException("Iterator is not positioned on a row"); }
+        if (table.usesRowIds() && (index == table.numColumns() || index == table.getRowIdColumn())) {
+            return RowIdentity.value(key);
+        }
+        Column column = table.getColumn(index);
         RowInput data = input(value);
         int offset = data.readShortAtOffset(index * 2);
         if (offset == InsertRow.IS_NULL) { return null; }
@@ -98,6 +104,13 @@ public class TableIterator implements AutoCloseable {
     public Object[] getRow() {
         Object[] row = new Object[numColumns()];
         for (int i = 0; i < row.length; i++) { row[i] = getColumnVal(i); }
+        return row;
+    }
+
+    /** Aggregate representatives must retain the hidden row ID as well as data. */
+    public Object[] getSnapshot() {
+        Object[] row = Arrays.copyOf(getRow(), numColumns() + 1);
+        if (table.usesRowIds()) { row[numColumns()] = getColumnVal(numColumns()); }
         return row;
     }
 

@@ -36,7 +36,7 @@ import java.util.Locale;
             case "KEY": return token(sym.KEY);
             case "NOT": return token(sym.NOT);
             case "NULL": return token(sym.NULL);
-            case "INTEGER": case "INT": return token(sym.INTEGER);
+            case "INTEGER": case "INT": return token(sym.INTEGER, text.toUpperCase(Locale.ROOT));
             case "REAL": case "DOUBLE": case "FLOAT": return token(sym.REAL);
             case "CHAR": return token(sym.CHAR);
             case "VARCHAR": return token(sym.VARCHAR);

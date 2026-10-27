@@ -53,10 +53,11 @@ public class Catalog {
             throw new IllegalArgumentException("A table must contain between 1 and 255 columns");
         }
         try (RowOutput out = new RowOutput()) {
-            // Zero cannot be a legacy column count. Version 1 uses UTF-8 strings.
+            // Zero cannot be a legacy column count. Version 2 adds row identity.
             out.writeByte(0);
-            out.writeByte(1);
+            out.writeByte(table.getStorageVersion());
             out.writeByte(table.numColumns());
+            if (table.usesRowIds()) { out.writeShort(table.getRowIdColumn()); }
             for (int i = 0; i < table.numColumns(); i++) {
                 Column column = table.getColumn(i);
                 byte[] name = column.getName().getBytes(StandardCharsets.UTF_8);
@@ -85,14 +86,19 @@ public class Catalog {
         RowInput in = new RowInput(Arrays.copyOfRange(data.getData(),
                 data.getOffset(), data.getOffset() + data.getSize()));
         int count = Byte.toUnsignedInt(in.readNextByte());
+        int version = 0;
         Charset charset = StandardCharsets.ISO_8859_1;
         if (count == 0) {
-            int version = Byte.toUnsignedInt(in.readNextByte());
-            if (version != 1) { throw new IllegalStateException("Unknown schema format: " + version); }
+            version = Byte.toUnsignedInt(in.readNextByte());
+            if (version != 1 && version != 2) {
+                throw new IllegalStateException("Unknown schema format: " + version);
+            }
             count = Byte.toUnsignedInt(in.readNextByte());
             charset = StandardCharsets.UTF_8;
         }
         table.setStringCharset(charset);
+        table.setStorageVersion(version);
+        table.setRowIdColumn(version >= 2 ? in.readNextShort() : -1);
         for (int i = 0; i < count; i++) {
             int length = Byte.toUnsignedInt(in.readNextByte());
             String columnName = in.readNextString(length, charset);

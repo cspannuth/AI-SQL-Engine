@@ -8,7 +8,7 @@ public class sym {
   /* terminals */
   public static final int AS = 7;
   public static final int LEFT = 45;
-  public static final int REAL = 20;
+  public static final int REAL = 19;
   public static final int FROM = 3;
   public static final int GT = 64;
   public static final int GROUP = 49;
@@ -27,10 +27,10 @@ public class sym {
   public static final int RPAREN = 56;
   public static final int ALL = 6;
   public static final int LT = 63;
-  public static final int INTEGER = 19;
+  public static final int INTEGER = 23;
   public static final int LPAREN = 55;
   public static final int NOT = 17;
-  public static final int TEXT = 23;
+  public static final int TEXT = 22;
   public static final int PARAMETER = 76;
   public static final int EQ = 61;
   public static final int INTO = 25;
@@ -40,7 +40,7 @@ public class sym {
   public static final int EXISTS = 14;
   public static final int ORDER = 52;
   public static final int DELETE = 29;
-  public static final int CHAR = 21;
+  public static final int CHAR = 20;
   public static final int CLIKE = 40;
   public static final int STAR = 59;
   public static final int CONCAT = 71;
@@ -70,7 +70,7 @@ public class sym {
   public static final int VALUES = 26;
   public static final int CREATE = 10;
   public static final int TRANSACTION = 32;
-  public static final int VARCHAR = 22;
+  public static final int VARCHAR = 21;
   public static final int LIMIT = 8;
   public static final int BEGIN = 30;
   public static final int UPDATE = 27;

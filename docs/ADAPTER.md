@@ -52,7 +52,7 @@ directory as the DBMS CLI. Data written under `db` will not appear in `.local-db
 | --- | --- |
 | `getCapabilities()` | API version, supported feature summary, current limitations, request bounds, query ceilings, and retention settings |
 | `listTables()` | Sorted names of existing tables allowed by the fixed policy |
-| `describeTable(name)` | Canonical table name and ordered columns with stored type, byte width, nullability, and primary-key flag |
+| `describeTable(name)` | Canonical table name, ordered columns with stored type, byte width, nullability, and primary-key flag; row ID availability and aliased key name |
 | `queryReadOnly(sql, parameters)` | Parse and bind one SELECT, authorize every source table, execute within budgets, and retain an immutable result |
 | `queryReadOnly(sql, parameters, limits)` | The same operation with lower per-request limits |
 | `getResult(resultId)` | Retrieve a retained, unexpired result from this adapter instance |
@@ -99,6 +99,9 @@ expiry times, elapsed milliseconds, execution counters, and the effective limits
 Result types are INTEGER, REAL, NUMERIC, TEXT, NULL, or UNKNOWN. NUMERIC permits
 integer and real values, including expressions that can overflow into REAL.
 Schema-derived types remain available for empty or entirely-null columns.
+Table metadata includes `rowIdTable` and `rowIdColumn`; these distinguish new rowid
+tables from older formats without reading data. Hidden IDs are absent from the
+declared column list and `SELECT *`. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
 Nulls remain null rather than becoming the string `"null"` or zero.
 
 `complete()` describes the submitted SQL result. For example, a successful

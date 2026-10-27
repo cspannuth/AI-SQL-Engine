@@ -10,6 +10,8 @@ public class Table {
     private ArrayList<Column> columns;
     private Database db;
     private Charset stringCharset = StandardCharsets.UTF_8;
+    private int storageVersion = 1;
+    private int rowIdColumn = -1;
 
     public Table(String name) { this.name = name; }
 
@@ -28,6 +30,8 @@ public class Table {
             name = cached.name;
             db = cached.db;
             stringCharset = cached.stringCharset;
+            storageVersion = cached.storageVersion;
+            rowIdColumn = cached.rowIdColumn;
             columns = new ArrayList<>();
             for (Column source : cached.columns) {
                 Column copy = new Column(source.getName(), this);
@@ -53,6 +57,27 @@ public class Table {
         }
         return null;
     }
+
+    /** Declared columns shadow SQLite's three names for the hidden row ID. */
+    public Column resolveColumn(Column reference) {
+        for (Column column : columns) {
+            if (reference.nameMatches(column, this)) { return column; }
+        }
+        String name = reference.getName();
+        if (!usesRowIds() || !(name.equalsIgnoreCase("rowid")
+                || name.equalsIgnoreCase("oid") || name.equalsIgnoreCase("_rowid_"))) { return null; }
+        Column hidden = new Column(name, this);
+        hidden.setType(Column.INTEGER);
+        hidden.setLength(8);
+        hidden.setIndex(rowIdColumn >= 0 ? rowIdColumn : numColumns());
+        return reference.nameMatches(hidden, this) ? hidden : null;
+    }
+
+    public boolean usesRowIds() { return storageVersion >= 2; }
+    public int getStorageVersion() { return storageVersion; }
+    public void setStorageVersion(int version) { storageVersion = version; }
+    public int getRowIdColumn() { return rowIdColumn; }
+    public void setRowIdColumn(int index) { rowIdColumn = index; }
 
     public String dbName() { return name + ".tab.db"; }
     public String getName() { return name; }

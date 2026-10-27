@@ -27,6 +27,7 @@ public class AdapterTests {
             retention(home, access);
             isolation(home, home.resolveSibling("other-database"), access);
             deterministicDeadline();
+            rowIdentityMetadata(home);
             System.out.println("Adapter checks passed: " + assertions);
         } finally { DBMS.shutdown(); }
     }
@@ -54,6 +55,7 @@ public class AdapterTests {
         check(schema.columns().get(0).primaryKey() && !schema.columns().get(0).nullable(), "Key nullability");
         check(schema.columns().get(0).byteLength() == 8, "New integer width");
         check(schema.columns().get(2).type().equals("REAL"), "Stored column type");
+        check(schema.rowIdTable() && schema.rowIdColumn().equals("id"), "Row identity metadata");
         fails(DatabaseAdapter.ErrorCode.ACCESS_DENIED, () -> adapter.describeTable("secrets"));
         fails(DatabaseAdapter.ErrorCode.NOT_FOUND, () -> adapter.describeTable("missing"));
         DatabaseAdapter.ReadResult empty = adapter.queryReadOnly("SELECT amount,note FROM emptydata;");
@@ -69,6 +71,27 @@ public class AdapterTests {
         check(aggregate.rows().get(0).equals(Arrays.asList(0L, null, null, null)), "Empty aggregate values");
         check(adapter.getCapabilities().apiVersion() == 1, "API version");
         check(adapter.getCapabilities().maximumLimits().equals(DEFAULTS), "Configured ceilings exposed");
+    }
+
+    private static void rowIdentityMetadata(Path home) {
+        DBMS.init(home);
+        DBMS.execute("CREATE TABLE loose_metadata(value TEXT);");
+        DBMS.execute("INSERT INTO loose_metadata VALUES(NULL),('duplicate'),('duplicate');");
+        DBMS.execute("CREATE TABLE key_metadata(code TEXT PRIMARY KEY);");
+        DBMS.shutdown();
+        try (DatabaseAdapter adapter = DatabaseAdapter.open(home, DatabaseAdapter.AccessPolicy.readAll("reader"))) {
+            DatabaseAdapter.TableSchema loose = adapter.describeTable("loose_metadata");
+            check(loose.rowIdTable() && loose.rowIdColumn() == null, "Hidden row ID metadata");
+            check(loose.columns().size() == 1 && !loose.columns().get(0).primaryKey()
+                    && loose.columns().get(0).nullable(), "No implicit first-column key");
+            DatabaseAdapter.TableSchema text = adapter.describeTable("key_metadata");
+            check(text.columns().get(0).primaryKey() && text.columns().get(0).nullable(), "Nullable ordinary key");
+            DatabaseAdapter.ReadResult result = adapter.queryReadOnly("SELECT rowid,* FROM loose_metadata ORDER BY rowid;");
+            check(result.rows().equals(List.of(Arrays.asList(1L,null),List.of(2L,"duplicate"),List.of(3L,"duplicate"))),
+                    "Adapter returns deterministic row ID results");
+            check(adapter.queryReadOnly("SELECT rowid FROM loose_metadata WHERE 0;").columns().get(0).type()
+                    == SqlType.INTEGER, "Empty row ID results retain integer type");
+        }
     }
 
     private static void parameters(DatabaseAdapter adapter) {

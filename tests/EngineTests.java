@@ -18,10 +18,15 @@ public class EngineTests {
             mutations();
             transactions();
             storage();
+            rowIdentity();
             syntaxAndErrors();
             DBMS.shutdown();
             DBMS.init(home);
             rows("SELECT label FROM persisted;", row("saved"));
+            rows("SELECT id,label FROM previous ORDER BY id;", row(7,"changed"), row(8,"caf\u00e9"));
+            sql("INSERT INTO previous VALUES(9,'after restart');");
+            rows("SELECT id,label FROM previous WHERE id=9;", row(9,"after restart"));
+            fails("INSERT INTO previous(label) VALUES('no generated key');");
             fails("SELECT * FROM unfinished;");
             DBMS.execute("BEGIN;");
             DBMS.execute("INSERT INTO persisted VALUES (2, 'uncommitted');");
@@ -244,6 +249,73 @@ public class EngineTests {
                     new DatabaseEntry(metadata.getBufferBytes()));
             table.put(null,new DatabaseEntry(new byte[]{0,0,0,7}),
                     new DatabaseEntry(new byte[]{-1,-2,0,6,0,7,(byte)0xe9}));
+        }
+    }
+
+    private static void rowIdentity() throws Exception {
+        long[] ids = {Long.MIN_VALUE, -100, -1, 0, 1, 100, Long.MAX_VALUE};
+        byte[] prior = null;
+        for (long id : ids) {
+            byte[] key = RowIdentity.key(id);
+            equal(RowIdentity.value(new DatabaseEntry(key)), id, "Row ID key round trip");
+            if (prior != null) { equal(Arrays.compareUnsigned(prior, key) < 0, true, "Signed key order"); }
+            byte[] wrapped = new byte[12];
+            System.arraycopy(key, 0, wrapped, 2, key.length);
+            equal(RowIdentity.value(new DatabaseEntry(wrapped, 2, key.length)), id, "Entry offsets");
+            prior = key;
+        }
+        sql("CREATE TABLE bound_ids(id INTEGER PRIMARY KEY,label TEXT);");
+        DBMS.execute("INSERT INTO bound_ids(label) VALUES(?);", List.of("generated"));
+        DBMS.execute("INSERT INTO bound_ids VALUES(?,?);", Arrays.asList(null,"null parameter"));
+        DBMS.execute("INSERT INTO bound_ids(rowid,label) VALUES(?,?);", List.of("8","numeric parameter"));
+        rows("SELECT rowid,id,label FROM bound_ids ORDER BY id;",
+                row(1,1,"generated"),row(2,2,"null parameter"),row(8,8,"numeric parameter"));
+        sql("CREATE TABLE allocation_ceiling(id INTEGER PRIMARY KEY,label TEXT);");
+        sql("INSERT INTO allocation_ceiling VALUES(9223372036854775807,'maximum');");
+        sql("INSERT INTO allocation_ceiling(label) VALUES('random'),('random'),('random');");
+        rows("SELECT COUNT(*),COUNT(DISTINCT id),MIN(id)>0,MAX(id) FROM allocation_ceiling;",
+                row(4,4,1,Long.MAX_VALUE));
+        sql("BEGIN;");
+        sql("INSERT INTO allocation_ceiling(label) VALUES('rolled back');");
+        sql("ROLLBACK;");
+        rows("SELECT COUNT(*) FROM allocation_ceiling;", row(4));
+
+        previousFixture();
+        rows("SELECT * FROM previous;",row(7,"\u00e9"));
+        sql("INSERT INTO previous VALUES(8,'caf\u00e9');");
+        sql("UPDATE previous SET label='changed' WHERE id=7;");
+        fails("INSERT INTO previous VALUES(NULL,'no generated key');");
+        fails("SELECT rowid FROM previous;");
+        fails("UPDATE previous SET id=8 WHERE id=7;");
+        sql("BEGIN;");
+        sql("DELETE FROM previous WHERE id=8;");
+        sql("UPDATE previous SET id=10 WHERE id=7;");
+        sql("ROLLBACK;");
+        rows("SELECT * FROM previous ORDER BY id;",row(7,"changed"),row(8,"caf\u00e9"));
+        Table metadata = new Table("previous");
+        Catalog.getMetadata(metadata);
+        equal(metadata.getStorageVersion(),1,"Previous catalog version retained");
+        equal(metadata.usesRowIds(),false,"Previous keys remain unchanged");
+    }
+
+    /** Version 1 uses UTF-8 and 64-bit integers, but still stores the declared PK as its key. */
+    private static void previousFixture() throws Exception {
+        DatabaseConfig config = new DatabaseConfig();
+        config.setTransactional(true);
+        config.setAllowCreate(true);
+        try (Database catalog = DBMS.getEnv().openDatabase(null,Catalog.CATALOG_NAME,config);
+             Database table = DBMS.getEnv().openDatabase(null,"previous.tab.db",config);
+             RowOutput metadata = new RowOutput(); RowOutput key = new RowOutput()) {
+            metadata.writeByte(0); metadata.writeByte(1); metadata.writeByte(2);
+            metadata.writeByte(2); metadata.writeBytes("id");
+            metadata.writeByte(0); metadata.writeInt(8); metadata.writeBoolean(true); metadata.writeBoolean(true);
+            metadata.writeByte(5); metadata.writeBytes("label");
+            metadata.writeByte(3); metadata.writeInt(20); metadata.writeBoolean(false); metadata.writeBoolean(false);
+            catalog.put(null,new DatabaseEntry("previous".getBytes(StandardCharsets.UTF_8)),
+                    new DatabaseEntry(metadata.getBufferBytes()));
+            key.writeLong(7);
+            table.put(null,new DatabaseEntry(key.getBufferBytes()),
+                    new DatabaseEntry(new byte[]{-1,-2,0,6,0,8,(byte)0xc3,(byte)0xa9}));
         }
     }
 

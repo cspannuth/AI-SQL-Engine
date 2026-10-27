@@ -73,7 +73,7 @@ public final class DatabaseAdapter implements AutoCloseable {
     }
 
     public record ColumnSchema(String name, String type, int byteLength, boolean nullable, boolean primaryKey) { }
-    public record TableSchema(String name, List<ColumnSchema> columns) {
+    public record TableSchema(String name, List<ColumnSchema> columns, boolean rowIdTable, String rowIdColumn) {
         public TableSchema { columns = List.copyOf(columns); }
     }
     public record ResultColumn(String name, SqlType type) { }
@@ -140,7 +140,8 @@ public final class DatabaseAdapter implements AutoCloseable {
         return read(null, maximumLimits, budget -> new Capabilities(1, "custom SQLite-oriented SQL subset",
                 List.of("SELECT", "schema discovery", "positional scalar parameters", "INNER/CROSS/LEFT joins",
                         "GROUP BY/HAVING", "COUNT/SUM/AVG/TOTAL/MIN/MAX", "DISTINCT/ORDER BY/LIMIT",
-                        "row/byte previews", "scan/working-data budgets", "cooperative deadline", "result retrieval"),
+                        "rowid tables for new schemas", "row/byte previews", "scan/working-data budgets",
+                        "cooperative deadline", "result retrieval"),
                 List.of("read-only adapter", "one serialized session", "no subqueries or CTEs",
                         "no persistent result history", "no snapshot version or multi-user authentication",
                         "working bytes estimate payload rather than total heap", "deadline cannot preempt blocking code"),
@@ -172,10 +173,14 @@ public final class DatabaseAdapter implements AutoCloseable {
             String[] types = {"INTEGER", "REAL", "CHAR", "VARCHAR"};
             for (int i = 0; i < table.numColumns(); i++) {
                 Column column = table.getColumn(i);
+                boolean keyNotNull = column.isPrimaryKey() && !table.usesRowIds()
+                        || i == table.getRowIdColumn();
                 columns.add(new ColumnSchema(column.getName(), types[column.getType()], column.getLength(),
-                        !column.isNotNull() && !column.isPrimaryKey(), column.isPrimaryKey()));
+                        !column.isNotNull() && !keyNotNull, column.isPrimaryKey()));
             }
-            return new TableSchema(table.getName(), columns);
+            String rowIdColumn = table.getRowIdColumn() < 0 ? null
+                    : table.getColumn(table.getRowIdColumn()).getName();
+            return new TableSchema(table.getName(), columns, table.usesRowIds(), rowIdColumn);
         });
     }
 

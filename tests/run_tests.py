@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from build import build, generate
 from client_checks import check_client
+from rowid_checks import check_rowids
 
 
 def database_hashes():
@@ -163,7 +164,7 @@ def crash_recovery(classpath, home):
             "CREATE TABLE recovery(id INTEGER PRIMARY KEY,value TEXT);",
             "INSERT INTO recovery VALUES(1,'committed');",
             "BEGIN;",
-            "INSERT INTO recovery VALUES(2,'unfinished');",
+            "INSERT INTO recovery(value) VALUES('unfinished');",
             "CREATE TABLE partial(id INTEGER PRIMARY KEY);",
         ]:
             process.stdin.write(base64.b64encode(sql.encode()).decode() + "\n")
@@ -184,9 +185,12 @@ def crash_recovery(classpath, home):
     results = run_engine(classpath, home, [
         "SELECT * FROM recovery ORDER BY id;",
         "SELECT * FROM partial;",
+        "INSERT INTO recovery(value) VALUES('after recovery');",
+        "SELECT rowid,id,value FROM recovery ORDER BY id;",
     ])
     assert results[0]["rows"] == [[1, "committed"]], results
     assert "error" in results[1], results
+    assert results[3]["rows"] == [[1, 1, "committed"], [2, 2, "after recovery"]], results
     print("Crash recovery passed: committed data retained; unfinished row and DDL rolled back")
 
 
@@ -225,6 +229,7 @@ def main():
                            cwd=ROOT, check=True, timeout=60)
             check_client(classpath, workspace / "client", workspace, run_engine)
             compare_sqlite(classpath, workspace / "comparison")
+            check_rowids(classpath, workspace / "rowids", run_engine)
             crash_recovery(classpath, workspace / "recovery")
             cli_checks(classpath, workspace / "cli")
     finally:

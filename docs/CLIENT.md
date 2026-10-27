@@ -105,6 +105,10 @@ or startup banners in JSON mode. Keep stdin open to preserve the session.
 | `get_result` | `operation`, `resultId` |
 | `close` | `operation` |
 
+`describe_table` returns declared columns plus `rowIdTable` and `rowIdColumn`.
+New tables expose hidden row ID aliases; older tables retain their original key
+rules. See [row identity](ROW_IDENTITY.md) before querying hidden IDs.
+
 `id` may be a string or signed 64-bit integer; omitted IDs return null. Unknown
 fields, duplicate object keys, invalid JSON, and unsupported types fail explicitly.
 Wire requests are capped at 256 KiB per line and 32 levels of JSON nesting. Adapter

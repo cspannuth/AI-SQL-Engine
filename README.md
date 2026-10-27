@@ -45,6 +45,11 @@ ROLLBACK;
 Statements end with semicolons and may span lines. Enter `q` to exit. Closing the
 database rolls back an unfinished transaction.
 
+New tables support SQLite-style row IDs. You can omit an INTEGER PRIMARY KEY
+value to generate it, or create a table without a declared primary key and query
+its hidden `rowid`. Existing tables retain their stored format and key rules.
+See [row IDs and primary keys](docs/ROW_IDENTITY.md) for examples and limits.
+
 ## Verify and regenerate
 
 ```powershell

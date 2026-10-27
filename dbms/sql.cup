@@ -49,7 +49,7 @@ action code {:
     private ArrayList<Column> primaryKey(ArrayList<Column> columns, String name) {
         for (Column column : columns) {
             if (column.getName().equalsIgnoreCase(name)) {
-                column.applyOpts(new ColumnOptions(true, true));
+                column.applyOpts(new ColumnOptions(false, true));
                 return columns;
             }
         }
@@ -59,7 +59,8 @@ action code {:
 
 terminal SELECT, FROM, WHERE, DISTINCT, ALL, AS, LIMIT, OFFSET;
 terminal CREATE, DROP, TABLE, IF, EXISTS, PRIMARY, KEY, NOT, NULL;
-terminal INTEGER, REAL, CHAR, VARCHAR, TEXT;
+terminal REAL, CHAR, VARCHAR, TEXT;
+terminal String INTEGER;
 terminal INSERT, INTO, VALUES, UPDATE, SET, DELETE;
 terminal BEGIN, WORK, TRANSACTION, COMMIT, ROLLBACK, END;
 terminal AND, OR, IS, LIKE, CLIKE, IN, BETWEEN;
@@ -129,7 +130,8 @@ definitions ::= column_definitions:c {: RESULT = c; :}
 column_definitions ::= column_definition:c
     {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
     | column_definitions:l COMMA column_definition:c {: l.add(c); RESULT = l; :};
-column_definition ::= column:c INTEGER column_options:o {: RESULT = define(c, Column.INTEGER, null, o); :}
+column_definition ::= column:c INTEGER:t column_options:o
+    {: RESULT = define(c, Column.INTEGER, null, o); RESULT.setDeclaredInteger(t.equals("INTEGER")); :}
     | column:c REAL column_options:o {: RESULT = define(c, Column.REAL, null, o); :}
     | column:c TEXT column_options:o {: RESULT = define(c, Column.VARCHAR, 32767L, o); :}
     | column:c VARCHAR LPAREN INT_VAL:n RPAREN column_options:o {: RESULT = define(c, Column.VARCHAR, n, o); :}
@@ -138,7 +140,7 @@ column_definition ::= column:c INTEGER column_options:o {: RESULT = define(c, Co
     | column:c CHAR column_options:o {: RESULT = define(c, Column.CHAR, 1L, o); :};
 column_options ::= PRIMARY KEY NOT NULL {: RESULT = new ColumnOptions(true, true); :}
     | NOT NULL PRIMARY KEY {: RESULT = new ColumnOptions(true, true); :}
-    | PRIMARY KEY {: RESULT = new ColumnOptions(true, true); :}
+    | PRIMARY KEY {: RESULT = new ColumnOptions(false, true); :}
     | NOT NULL {: RESULT = new ColumnOptions(true, false); :}
     | {: RESULT = new ColumnOptions(false, false); :};
 drop_statement ::= DROP TABLE if_exists:i table:t

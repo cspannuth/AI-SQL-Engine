@@ -46,13 +46,11 @@ public abstract class SQLStatement {
             Column match = null;
             TableIterator source = null;
             for (TableIterator iterator : iterators) {
-                for (int i = 0; i < iterator.numColumns(); i++) {
-                    Column candidate = iterator.getColumn(i);
-                    if (reference.nameMatches(candidate, iterator.getTable())) {
-                        if (match != null) { throw new IllegalArgumentException("Ambiguous column: " + reference); }
-                        match = candidate;
-                        source = iterator;
-                    }
+                Column candidate = iterator.getTable().resolveColumn(reference);
+                if (candidate != null) {
+                    if (match != null) { throw new IllegalArgumentException("Ambiguous column: " + reference); }
+                    match = candidate;
+                    source = iterator;
                 }
             }
             if (match == null) { throw new IllegalArgumentException("Unknown column: " + reference); }

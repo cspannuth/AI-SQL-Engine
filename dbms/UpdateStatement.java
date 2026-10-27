@@ -42,12 +42,17 @@ public class UpdateStatement extends SQLStatement {
             }
             while (iterator.next()) {
                 Object[] row = iterator.getRow();
+                Long rowId = table.usesRowIds() ? RowIdentity.value(new DatabaseEntry(iterator.getKey())) : null;
                 for (Column assignment : assignments) {
                     Object value = assignment.getUpdateVal();
                     if (value instanceof CompareTerm) { value = ((CompareTerm) value).getValue(); }
-                    row[assignment.getIndex()] = table.getColumn(assignment.getIndex()).adjustValue(value);
+                    int index = assignment.getIndex();
+                    if (table.usesRowIds() && (index == table.numColumns() || index == table.getRowIdColumn())) {
+                        rowId = RowIdentity.integer(value);
+                        if (table.getRowIdColumn() >= 0) { row[table.getRowIdColumn()] = rowId; }
+                    } else { row[index] = table.getColumn(index).adjustValue(value); }
                 }
-                InsertRow replacement = new InsertRow(table, row);
+                InsertRow replacement = new InsertRow(table, row, rowId);
                 replacement.marshall();
                 byte[] oldKey = iterator.getKey();
                 originalKeys.add(oldKey);
@@ -65,6 +70,7 @@ public class UpdateStatement extends SQLStatement {
                 throw new IllegalArgumentException("UPDATE conflicts with an existing primary key");
             }
         }
+        RowIdentity.validatePrimaryKeys(table, replacements, oldKeys);
         for (byte[] key : originalKeys) {
             table.getDB().delete(DBMS.getTransaction(), new DatabaseEntry(key));
         }

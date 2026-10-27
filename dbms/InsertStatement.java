@@ -28,10 +28,7 @@ public class InsertStatement extends SQLStatement {
             Set<Integer> assigned = new HashSet<>();
             for (int i = 0; i < numColumns(); i++) {
                 Column reference = getColumn(i);
-                Column match = null;
-                for (int j = 0; j < table.numColumns(); j++) {
-                    if (reference.nameMatches(table.getColumn(j), table)) { match = table.getColumn(j); }
-                }
+                Column match = table.resolveColumn(reference);
                 if (match == null) { throw new IllegalArgumentException("Unknown column: " + reference); }
                 if (!assigned.add(match.getIndex())) {
                     throw new IllegalArgumentException("Duplicate column: " + reference);
@@ -41,11 +38,13 @@ public class InsertStatement extends SQLStatement {
         }
         List<InsertRow> encoded = new ArrayList<>();
         Set<ByteBuffer> keys = new HashSet<>();
+        RowIdentity.Allocator rowIds = table.usesRowIds() ? new RowIdentity.Allocator(table) : null;
         for (List<Object> input : values) {
             if (input.size() != targets.size()) {
                 throw new IllegalArgumentException("Value count does not match the INSERT column count");
             }
             Object[] row = new Object[table.numColumns()];
+            Object requestedRowId = null;
             for (int i = 0; i < targets.size(); i++) {
                 Object value = input.get(i);
                 if (value instanceof CompareTerm) {
@@ -55,10 +54,18 @@ public class InsertStatement extends SQLStatement {
                     }
                     value = expression.getValue();
                 }
-                row[targets.get(i).getIndex()] = value;
+                int index = targets.get(i).getIndex();
+                if (index == table.numColumns()) { requestedRowId = value; }
+                else { row[index] = value; }
+            }
+            Long rowId = null;
+            if (rowIds != null) {
+                int alias = table.getRowIdColumn();
+                rowId = rowIds.next(alias >= 0 ? row[alias] : requestedRowId);
+                if (alias >= 0) { row[alias] = rowId; }
             }
             for (int i = 0; i < row.length; i++) { row[i] = table.getColumn(i).adjustValue(row[i]); }
-            InsertRow record = new InsertRow(table, row);
+            InsertRow record = new InsertRow(table, row, rowId);
             record.marshall();
             if (!keys.add(ByteBuffer.wrap(record.keyEntry().getData()))
                     || table.getDB().get(DBMS.getTransaction(), record.keyEntry(),
@@ -67,6 +74,7 @@ public class InsertStatement extends SQLStatement {
             }
             encoded.add(record);
         }
+        RowIdentity.validatePrimaryKeys(table, encoded, Collections.emptySet());
         // All logical validation precedes the first write.
         for (InsertRow record : encoded) {
             if (table.getDB().putNoOverwrite(DBMS.getTransaction(),

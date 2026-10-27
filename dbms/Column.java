@@ -35,6 +35,7 @@ public class Column extends CompareTerm {
     private int length;
     private boolean isNotNull;
     private boolean isPrimaryKey;
+    private boolean declaredInteger = true;
     private Object updateVal;
     private boolean shouldUpdate;
     private int index;           // the index of the column in its table
@@ -77,6 +78,7 @@ public class Column extends CompareTerm {
         this.length = col.length;
         this.isNotNull = col.isNotNull;
         this.isPrimaryKey = col.isPrimaryKey;
+        this.declaredInteger = col.declaredInteger;
         this.index = col.index;
         this.updateVal = col.updateVal; 
         this.tableIter = col.tableIter;
@@ -131,7 +133,7 @@ public class Column extends CompareTerm {
         Object adjustedVal = val;
         String valStr;
         
-        if (this.isPrimaryKey() && val == null) {
+        if (this.isPrimaryKey() && val == null && (table == null || !table.usesRowIds())) {
             throw new IllegalArgumentException("Null value specified " +
               "for primary key column " + this.name);
         }
@@ -389,8 +391,13 @@ public class Column extends CompareTerm {
         this.length = other.length;
         this.isNotNull = other.isNotNull;
         this.isPrimaryKey = other.isPrimaryKey;
+        this.declaredInteger = other.declaredInteger;
         this.index = other.index;
     }
+
+    /** SQLite aliases only the exact INTEGER type name to the physical row ID. */
+    public boolean isDeclaredInteger() { return declaredInteger; }
+    public void setDeclaredInteger(boolean value) { declaredInteger = value; }
     
     /**
      * Sets the table iterator used to obtain the values of this column.

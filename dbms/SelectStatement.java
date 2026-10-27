@@ -164,9 +164,7 @@ public class SelectStatement extends SQLStatement {
                 String name = ((Column) expression).getName();
                 if (preferInput) {
                     for (TableIterator iterator : iterators) {
-                        for (int i = 0; i < iterator.numColumns(); i++) {
-                            if (iterator.getColumn(i).getName().equalsIgnoreCase(name)) { return expression; }
-                        }
+                        if (iterator.getTable().resolveColumn((Column) expression) != null) { return expression; }
                     }
                 }
                 for (SelectItem item : output) {
@@ -194,7 +192,7 @@ public class SelectStatement extends SQLStatement {
                 }
             }
             if (!matched && from.leftJoins.get(depth)) {
-                iterator.useSnapshot(new Object[iterator.numColumns()]);
+                iterator.useSnapshot(new Object[iterator.numColumns() + 1]);
                 scan(depth + 1);
             }
         }
@@ -226,7 +224,7 @@ public class SelectStatement extends SQLStatement {
                     && group.states.get(representativeAggregate).changedRepresentative())) {
                 group.representative = new ArrayList<>();
                 for (TableIterator iterator : iterators) {
-                    Object[] row = iterator.getRow();
+                    Object[] row = iterator.getSnapshot();
                     QueryBudget.reserveBytes(QueryBudget.payloadBytes(Arrays.asList(row)));
                     group.representative.add(row);
                 }
@@ -248,7 +246,7 @@ public class SelectStatement extends SQLStatement {
                 for (Group group : groups.values()) {
                     for (int i = 0; i < iterators.size(); i++) {
                         iterators.get(i).useSnapshot(group.representative == null
-                                ? new Object[iterators.get(i).numColumns()] : group.representative.get(i));
+                                ? new Object[iterators.get(i).numColumns() + 1] : group.representative.get(i));
                     }
                     for (int i = 0; i < aggregates.size(); i++) { aggregates.get(i).useState(group.states.get(i)); }
                     if (having == null || having.isTrue()) { emit(); }

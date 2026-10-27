@@ -15,6 +15,7 @@ public class CreateStatement extends SQLStatement {
             throw new IllegalArgumentException(table + ": table already exists");
         }
         Set<String> names = new HashSet<>();
+        table.setStorageVersion(2);
         int keys = 0;
         for (int i = 0; i < numColumns(); i++) {
             Column definition = getColumn(i);
@@ -32,9 +33,10 @@ public class CreateStatement extends SQLStatement {
             table.addColumn(column);
         }
         if (keys > 1) { throw new IllegalArgumentException("Only one primary-key column is supported"); }
-        if (keys == 0 && table.numColumns() > 0) {
-            // Preserve the existing DBMS convention.
-            table.getColumn(0).applyOpts(new ColumnOptions(true, true));
+        Column primaryKey = table.primaryKeyColumn();
+        if (primaryKey != null && primaryKey.getType() == Column.INTEGER
+                && primaryKey.isDeclaredInteger()) {
+            table.setRowIdColumn(primaryKey.getIndex());
         }
         if (Catalog.putMetadata(table) == OperationStatus.KEYEXIST) {
             throw new IllegalStateException("Table appeared during CREATE");

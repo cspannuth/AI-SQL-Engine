@@ -10,6 +10,7 @@ remain in place.
 | Area | Implemented |
 | --- | --- |
 | Schema | CREATE TABLE, DROP TABLE, IF NOT EXISTS / IF EXISTS; inline or table-level single-column PRIMARY KEY; NOT NULL |
+| Row identity | New tables have hidden rowid/oid/_rowid_ aliases; INTEGER PRIMARY KEY aliases the ID; omitted or NULL INSERT IDs are generated |
 | Types | INTEGER/INT, REAL/DOUBLE/FLOAT, CHAR(n), VARCHAR(n), TEXT; optional VARCHAR length and default CHAR length 1 |
 | Inserts | INSERT INTO ... VALUES (...), (...); optional, reordered column lists; constant expressions |
 | Updates | UPDATE ... SET ... WHERE ...; expressions evaluated against the original row; primary-key changes; all-row updates |
@@ -36,10 +37,11 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
 
 ## Important remaining differences
 
-- **Table identity:** every table retains one primary-key column. If none is
-  declared, the first column becomes the primary key, preserving this project's
-  existing convention. Hidden SQLite rowid tables, automatic integer key
-  allocation, and composite keys are not implemented.
+- **Table identity:** new tables use internal row IDs and do not require a primary
+  key. Exact INTEGER PRIMARY KEY declarations alias the ID; INT does not. Other
+  primary keys allow NULL unless NOT NULL is declared. Old tables retain their
+  original key semantics without automatic migration. Composite keys and WITHOUT
+  ROWID remain work. See [row identity](ROW_IDENTITY.md) for allocation and aliases.
 - **Types and lengths:** schemas retain strong stored types. INTEGER values in
   new tables occupy signed 64 bits; original INTEGER schemas retain 32 bits.
   REAL stores doubles. CHAR pads to its byte width, and strings exceeding their
@@ -47,7 +49,8 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   dynamic storage classes and VARCHAR length behavior differ. Basic comparison
   affinity and numeric expression conversion are supported, but complete SQLite
   type/formatting behavior remains work.
-- **Storage:** new catalog records have a version marker and use UTF-8 strings.
+- **Storage:** new version 2 catalog records use UTF-8 and internal row ID keys.
+  Version 1 tables retain UTF-8 and their primary-key byte representation.
   Unversioned tables retain their original single-byte encoding and integer
   widths; unsupported characters in those tables are rejected rather than
   corrupted. Existing data is not automatically rewritten. Stored row values
@@ -59,7 +62,8 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   NATURAL/USING/RIGHT/FULL joins, and custom collations remain work. Unsupported
   syntax fails rather than silently ignoring a clause.
 - **Writes:** INSERT ... SELECT, ON CONFLICT variants, RETURNING, and savepoints
-  are absent. Duplicate UPDATE assignments are rejected. Multi-row primary-key
+  are absent. Duplicate INSERT columns and UPDATE assignments, including aliases
+  for the same row ID, are rejected. Multi-row primary-key
   updates validate final uniqueness, which can differ from SQLite's immediate
   conflict checks. Logical mutation errors are detected before writing and
   preserve an explicit transaction's earlier statements. Storage failures
@@ -79,8 +83,9 @@ sources, runs engine assertions against disposable data, compares supported
 queries against Python's SQLite, and checks clean restarts, unfinished-transaction
 shutdown, forced process termination/recovery, and CLI error recovery.
 
-A golden fixture checks reading and updating the original unversioned storage
-format. The runner hashes existing `dbms/db` files before and after verification.
+Golden fixtures check reading and updating the original unversioned and version 1
+storage formats. Row ID checks compare supported mutations against SQLite across
+JVM restarts. The runner hashes existing `dbms/db` files before and after verification.
 These checks establish the tested cases, not general proof of SQLite parity,
 arbitrary crash safety, or concurrent isolation.
 

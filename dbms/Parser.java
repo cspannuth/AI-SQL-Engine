@@ -415,7 +415,7 @@ public class Parser extends java_cup.runtime.lr_parser {
     "\004\020\241\001\002\000\004\112\uffee\001\002\000\004" +
     "\071\243\001\002\000\004\112\031\001\002\000\006\072" +
     "\uffea\073\uffea\001\002\000\004\072\311\001\002\000\014" +
-    "\025\257\026\261\027\262\030\263\031\260\001\002\000" +
+    "\025\261\026\262\027\263\030\260\031\257\001\002\000" +
     "\006\072\uffec\073\250\001\002\000\006\021\252\112\031" +
     "\001\002\000\006\072\uffe9\073\uffe9\001\002\000\004\022" +
     "\253\001\002\000\004\071\254\001\002\000\004\112\255" +
@@ -789,7 +789,7 @@ class CUP$Parser$actions {
     private ArrayList<Column> primaryKey(ArrayList<Column> columns, String name) {
         for (Column column : columns) {
             if (column.getName().equalsIgnoreCase(name)) {
-                column.applyOpts(new ColumnOptions(true, true));
+                column.applyOpts(new ColumnOptions(false, true));
                 return columns;
             }
         }
@@ -2321,7 +2321,7 @@ class CUP$Parser$actions {
           case 34: // column_options ::= PRIMARY KEY
             {
               ColumnOptions RESULT = null;
-		 RESULT = new ColumnOptions(true, true);
+		 RESULT = new ColumnOptions(false, true);
               CUP$Parser$result = new java_cup.runtime.Symbol(26/*column_options*/, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).left, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right, RESULT);
             }
           return CUP$Parser$result;
@@ -2447,10 +2447,13 @@ class CUP$Parser$actions {
 		int cleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)).left;
 		int cright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)).right;
 		Column c = (Column)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-2)).value;
+		int tleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).left;
+		int tright = ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-1)).right;
+		String t = (String)((java_cup.runtime.Symbol) CUP$Parser$stack.elementAt(CUP$Parser$top-1)).value;
 		int oleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int oright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		ColumnOptions o = (ColumnOptions)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = define(c, Column.INTEGER, null, o);
+		 RESULT = define(c, Column.INTEGER, null, o); RESULT.setDeclaredInteger(t.equals("INTEGER"));
               CUP$Parser$result = new java_cup.runtime.Symbol(24/*column_definition*/, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-2)).left, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right, RESULT);
             }
           return CUP$Parser$result;
