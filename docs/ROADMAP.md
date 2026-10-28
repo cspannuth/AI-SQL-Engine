@@ -18,6 +18,10 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 ### Implemented core
 
 - CREATE/DROP TABLE with atomic catalog updates and IF [NOT] EXISTS.
+- Literal column defaults and INSERT DEFAULT VALUES; single-column UNIQUE,
+  CHECK, and immediate foreign-key constraints, including parent deletion/key
+  protection. Metadata persists in catalog version 3 while earlier formats remain
+  writable. See [CONSTRAINTS.md](CONSTRAINTS.md) for supported forms and limits.
 - INSERT with column lists and multiple VALUES rows.
 - UPDATE and DELETE with filters, constraints, and affected-row counts.
 - Explicit BEGIN/COMMIT/ROLLBACK and automatic statement transactions.
@@ -44,10 +48,11 @@ alongside each engine improvement.
 
 ### Remaining engine work before claiming SQLite compatibility
 
-1. **Schema and type semantics.** Row identity and generated integer keys are now
-   implemented for new tables. Continue with type affinity, defaults,
-   UNIQUE/CHECK/foreign-key constraints, composite keys, and ALTER TABLE. Introduce
-   explicit format migrations where required, including opt-in conversion of old
+1. **Schema and type semantics.** Row identity, literal defaults, UNIQUE, CHECK,
+   and immediate single-column foreign keys are implemented for new tables.
+   Next add ALTER TABLE, then indexes and access paths; continue with type affinity,
+   composite constraints, expression defaults, and foreign-key actions/deferral.
+   Introduce explicit format migrations where required, including opt-in conversion of old
    tables to row IDs; preserve existing database files.
 2. **Query composition.** Add subqueries, correlated subqueries, EXISTS, compound
    SELECT operations, CTEs, INSERT ... SELECT, and broader join syntax.

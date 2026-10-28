@@ -9,17 +9,18 @@ public class SqlRunner {
         DBMS.init(Paths.get(args[0]));
         try {
             BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            PrintWriter output = new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true);
             String line;
             while ((line = input.readLine()) != null) {
                 String sql = new String(Base64.getDecoder().decode(line), StandardCharsets.UTF_8);
                 try {
                     QueryResult result = DBMS.execute(sql);
-                    System.out.println("{\"rows\":" + json(result.getRows())
+                    output.println("{\"rows\":" + json(result.getRows())
                             + ",\"affected\":" + result.getAffectedRows() + "}");
                 } catch (RuntimeException error) {
-                    System.out.println("{\"error\":" + json(error.getMessage()) + "}");
+                    output.println("{\"error\":" + json(error.getMessage()) + "}");
                 }
-                System.out.flush();
+                output.flush();
             }
         } finally { DBMS.shutdown(); }
     }

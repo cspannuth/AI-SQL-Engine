@@ -3,6 +3,13 @@ import java_cup.runtime.*;
 
 parser code {:
     private final List<ParameterTerm> parameters = new ArrayList<>();
+    private String sourceSql;
+
+    public void setSourceSql(String sql) { sourceSql = sql; }
+    public String expressionSql(int start, int end) {
+        if (sourceSql == null) { throw new IllegalArgumentException("CHECK requires SQL source text"); }
+        return sourceSql.substring(start, end);
+    }
 
     public ParameterTerm parameter(int index) {
         ParameterTerm term = new ParameterTerm(index);
@@ -34,7 +41,7 @@ action code {:
         return expression instanceof ConditionalExpression ? (ConditionalExpression) expression
                 : new TruthExpression(expression);
     }
-    private Column define(Column column, int type, Number length, ColumnOptions options) {
+    private SchemaDefinition define(Column column, int type, Number length, ColumnOptions options) {
         column.setType(type);
         if (length != null) {
             if (length.doubleValue() < 1 || length.doubleValue() > 32767) {
@@ -44,21 +51,13 @@ action code {:
             column.setLength((int) size);
         }
         column.applyOpts(options);
-        return column;
-    }
-    private ArrayList<Column> primaryKey(ArrayList<Column> columns, String name) {
-        for (Column column : columns) {
-            if (column.getName().equalsIgnoreCase(name)) {
-                column.applyOpts(new ColumnOptions(false, true));
-                return columns;
-            }
-        }
-        throw new IllegalArgumentException("Unknown primary-key column: " + name);
+        return new SchemaDefinition().addColumn(column, options);
     }
 :};
 
 terminal SELECT, FROM, WHERE, DISTINCT, ALL, AS, LIMIT, OFFSET;
 terminal CREATE, DROP, TABLE, IF, EXISTS, PRIMARY, KEY, NOT, NULL;
+terminal DEFAULT, UNIQUE, CHECK, REFERENCES, FOREIGN;
 terminal REAL, CHAR, VARCHAR, TEXT;
 terminal String INTEGER;
 terminal INSERT, INTO, VALUES, UPDATE, SET, DELETE;
@@ -84,9 +83,12 @@ non terminal Table table, table_reference;
 non terminal String alias, optional_alias, optional_outer;
 non terminal Boolean distinct, direction, if_exists, if_not_exists;
 non terminal Object optional_work;
-non terminal ArrayList<Column> definitions, column_definitions, column_list, insert_columns, assignments;
-non terminal Column column, column_definition, assignment;
+non terminal ArrayList<Column> column_list, insert_columns, assignments;
+non terminal SchemaDefinition definitions, column_definition;
+non terminal Column column, assignment;
 non terminal ColumnOptions column_options;
+non terminal Object default_value;
+non terminal String parent_column;
 non terminal ArrayList<Object> select_list;
 non terminal SelectItem select_item;
 non terminal FromClause from_clause, from_list;
@@ -124,25 +126,40 @@ column ::= ID:n {: RESULT = new Column(n); :}
 create_statement ::= CREATE TABLE if_not_exists:i table:t LPAREN definitions:c RPAREN
     {: RESULT = new CreateStatement(t, c); RESULT.setIfNotExists(i); :};
 if_not_exists ::= IF NOT EXISTS {: RESULT = true; :} | {: RESULT = false; :};
-definitions ::= column_definitions:c {: RESULT = c; :}
-              | column_definitions:c COMMA PRIMARY KEY LPAREN ID:n RPAREN
-                {: RESULT = primaryKey(c, n); :};
-column_definitions ::= column_definition:c
-    {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
-    | column_definitions:l COMMA column_definition:c {: l.add(c); RESULT = l; :};
+definitions ::= column_definition:c {: RESULT = c; :}
+    | definitions:d COMMA column_definition:c {: RESULT = d.append(c); :}
+    | definitions:d COMMA PRIMARY KEY LPAREN ID:n RPAREN
+      {: d.finishColumns(); d.primaryKey(n); RESULT = d; :}
+    | definitions:d COMMA UNIQUE LPAREN ID:n RPAREN
+      {: d.finishColumns(); d.column(n).setUnique(true); RESULT = d; :}
+    | definitions:d COMMA CHECK LPAREN expression:e RPAREN
+      {: d.finishColumns(); d.checks.add(parser.expressionSql(eleft, eright)); RESULT = d; :}
+    | definitions:d COMMA FOREIGN KEY LPAREN ID:c RPAREN REFERENCES ID:t parent_column:p
+      {: d.finishColumns(); d.foreignKeys.add(new ForeignKey(c, t, p)); RESULT = d; :};
 column_definition ::= column:c INTEGER:t column_options:o
-    {: RESULT = define(c, Column.INTEGER, null, o); RESULT.setDeclaredInteger(t.equals("INTEGER")); :}
+    {: c.setDeclaredInteger(t.equals("INTEGER")); RESULT = define(c, Column.INTEGER, null, o); :}
     | column:c REAL column_options:o {: RESULT = define(c, Column.REAL, null, o); :}
     | column:c TEXT column_options:o {: RESULT = define(c, Column.VARCHAR, 32767L, o); :}
     | column:c VARCHAR LPAREN INT_VAL:n RPAREN column_options:o {: RESULT = define(c, Column.VARCHAR, n, o); :}
     | column:c VARCHAR column_options:o {: RESULT = define(c, Column.VARCHAR, 32767L, o); :}
     | column:c CHAR LPAREN INT_VAL:n RPAREN column_options:o {: RESULT = define(c, Column.CHAR, n, o); :}
     | column:c CHAR column_options:o {: RESULT = define(c, Column.CHAR, 1L, o); :};
-column_options ::= PRIMARY KEY NOT NULL {: RESULT = new ColumnOptions(true, true); :}
-    | NOT NULL PRIMARY KEY {: RESULT = new ColumnOptions(true, true); :}
-    | PRIMARY KEY {: RESULT = new ColumnOptions(false, true); :}
-    | NOT NULL {: RESULT = new ColumnOptions(true, false); :}
+column_options ::= column_options:o PRIMARY KEY {: RESULT = o.primaryKey(); :}
+    | column_options:o NOT NULL {: RESULT = o.notNull(); :}
+    | column_options:o UNIQUE {: RESULT = o.unique(); :}
+    | column_options:o DEFAULT default_value:v {: RESULT = o.defaultValue(v); :}
+    | column_options:o CHECK LPAREN expression:e RPAREN
+      {: RESULT = o.check(parser.expressionSql(eleft, eright)); :}
+    | column_options:o REFERENCES ID:t parent_column:p {: RESULT = o.references(t, p); :}
     | {: RESULT = new ColumnOptions(false, false); :};
+parent_column ::= LPAREN ID:n RPAREN {: RESULT = n; :} | {: RESULT = null; :};
+default_value ::= STRING:s {: RESULT = s; :} | NULL {: RESULT = null; :}
+    | INT_VAL:n {: RESULT = new IntegerLiteral(n).getValue(); :}
+    | REAL_VAL:n {: RESULT = n; :}
+    | MINUS INT_VAL:n {: RESULT = new IntegerLiteral(n).negate().getValue(); :}
+    | PLUS INT_VAL:n {: RESULT = new IntegerLiteral(n).getValue(); :}
+    | MINUS REAL_VAL:n {: RESULT = -n; :}
+    | PLUS REAL_VAL:n {: RESULT = n; :};
 drop_statement ::= DROP TABLE if_exists:i table:t
     {: RESULT = new DropStatement(t); RESULT.setIfExists(i); :};
 if_exists ::= IF EXISTS {: RESULT = true; :} | {: RESULT = false; :};
@@ -240,7 +257,8 @@ scalar ::= column:c {: RESULT = c; :}
     | ID:f LPAREN STAR RPAREN {: RESULT = new AggregateTerm(f, null, false); :};
 
 insert_statement ::= INSERT INTO table:t insert_columns:c VALUES value_rows:r
-    {: RESULT = InsertStatement.fromRows(t, c, r); :};
+    {: RESULT = InsertStatement.fromRows(t, c, r); :}
+    | INSERT INTO table:t DEFAULT VALUES {: RESULT = InsertStatement.defaults(t); :};
 insert_columns ::= LPAREN column_list:c RPAREN {: RESULT = c; :} | {: RESULT = new ArrayList<Column>(); :};
 column_list ::= column:c {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
     | column_list:l COMMA column:c {: l.add(c); RESULT = l; :};

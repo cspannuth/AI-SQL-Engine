@@ -102,6 +102,9 @@ Schema-derived types remain available for empty or entirely-null columns.
 Table metadata includes `rowIdTable` and `rowIdColumn`; these distinguish new rowid
 tables from older formats without reading data. Hidden IDs are absent from the
 declared column list and `SELECT *`. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
+Columns also expose `unique`, `hasDefault`, and `defaultValue`; tables expose
+`checks` and `foreignKeys`. These describe persisted constraints without reading
+rows or resolving parent tables. See [CONSTRAINTS.md](CONSTRAINTS.md).
 Nulls remain null rather than becoming the string `"null"` or zero.
 
 `complete()` describes the submitted SQL result. For example, a successful

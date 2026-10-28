@@ -33,6 +33,9 @@ public class SelectStatement extends SQLStatement {
 
     public boolean distinctSpecified() { return distinct; }
 
+    /** Used to compile a persisted CHECK expression without executing a query. */
+    CompareTerm singleExpression() { return ((SelectItem) selectList.get(0)).expression; }
+
     protected void executeInternal() {
         Evaluation evaluation = new Evaluation();
         try {

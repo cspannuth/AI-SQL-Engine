@@ -7,7 +7,7 @@ import threading
 
 def check_client(classpath, home, workspace, seed):
     statements = [
-        "CREATE TABLE sales(id INTEGER PRIMARY KEY,category TEXT,amount REAL,note TEXT);",
+        "CREATE TABLE sales(id INTEGER PRIMARY KEY,category TEXT DEFAULT 'unassigned',amount REAL CHECK(amount>=0),note TEXT UNIQUE);",
         "CREATE TABLE restricted(id INTEGER PRIMARY KEY,value TEXT);",
         "INSERT INTO restricted VALUES(1,'restricted fixture');",
         "CREATE TABLE emptytable(id INTEGER PRIMARY KEY);",
@@ -48,6 +48,10 @@ def check_client(classpath, home, workspace, seed):
     check(bound["parameters"] == expected, bound)
     check(once("--tables")["data"] == ["emptytable", "restricted", "sales"], "Table listing")
     check(once("--schema", "sales")["data"]["columns"][0]["primaryKey"], "Schema key")
+    constraints = once("--schema", "sales")["data"]
+    check(constraints["columns"][1]["hasDefault"] and constraints["columns"][1]["defaultValue"] == "unassigned",
+          "Persisted default in JSON schema")
+    check(constraints["columns"][3]["unique"] and constraints["checks"] == ["amount>=0"], "Constraint JSON schema")
     check(once("--schema", "unknown", success=False)["error"]["code"] == "NOT_FOUND", "Missing table")
     check(once("--schema", "restricted", "--allow-table", "sales", success=False)["error"]["code"] == "ACCESS_DENIED", "Schema policy")
     check(once("--tables", "--allow-table", "sales")["data"] == ["sales"], "Filtered discovery")

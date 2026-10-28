@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from build import build, generate
 from client_checks import check_client
 from rowid_checks import check_rowids
+from constraint_checks import check_constraints
 
 
 def database_hashes():
@@ -161,11 +162,14 @@ def crash_recovery(classpath, home):
     )
     try:
         for sql in [
-            "CREATE TABLE recovery(id INTEGER PRIMARY KEY,value TEXT);",
+            "CREATE TABLE recovery(id INTEGER PRIMARY KEY,value TEXT UNIQUE DEFAULT 'committed' CHECK(value<>''));",
             "INSERT INTO recovery VALUES(1,'committed');",
+            "CREATE TABLE recovery_child(pid INTEGER REFERENCES recovery(id));",
+            "INSERT INTO recovery_child VALUES(1);",
             "BEGIN;",
             "INSERT INTO recovery(value) VALUES('unfinished');",
-            "CREATE TABLE partial(id INTEGER PRIMARY KEY);",
+            "INSERT INTO recovery_child VALUES(2);",
+            "CREATE TABLE partial(id INTEGER UNIQUE DEFAULT 1 CHECK(id>0) REFERENCES recovery(id));",
         ]:
             process.stdin.write(base64.b64encode(sql.encode()).decode() + "\n")
             process.stdin.flush()
@@ -187,11 +191,18 @@ def crash_recovery(classpath, home):
         "SELECT * FROM partial;",
         "INSERT INTO recovery(value) VALUES('after recovery');",
         "SELECT rowid,id,value FROM recovery ORDER BY id;",
+        "INSERT INTO recovery DEFAULT VALUES;",
+        "INSERT INTO recovery(value) VALUES('');",
+        "INSERT INTO recovery_child VALUES(99);",
+        "DELETE FROM recovery WHERE id=1;",
+        "SELECT * FROM recovery_child;",
     ])
     assert results[0]["rows"] == [[1, "committed"]], results
     assert "error" in results[1], results
     assert results[3]["rows"] == [[1, 1, "committed"], [2, 2, "after recovery"]], results
-    print("Crash recovery passed: committed data retained; unfinished row and DDL rolled back")
+    assert all("error" in result for result in results[4:8]), results
+    assert results[8]["rows"] == [[1]], results
+    print("Crash recovery passed: committed data and constraints retained; unfinished rows and DDL rolled back")
 
 
 def cli_checks(classpath, home):
@@ -227,9 +238,12 @@ def main():
                            cwd=ROOT, check=True, timeout=60)
             subprocess.run(["java", "-cp", classpath, "AdapterTests", str(workspace / "adapter")],
                            cwd=ROOT, check=True, timeout=60)
+            subprocess.run(["java", "-cp", classpath, "ConstraintTests", str(workspace / "constraint-api")],
+                           cwd=ROOT, check=True, timeout=60)
             check_client(classpath, workspace / "client", workspace, run_engine)
             compare_sqlite(classpath, workspace / "comparison")
             check_rowids(classpath, workspace / "rowids", run_engine)
+            check_constraints(classpath, workspace / "constraints", run_engine)
             crash_recovery(classpath, workspace / "recovery")
             cli_checks(classpath, workspace / "cli")
     finally:

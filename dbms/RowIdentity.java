@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import com.sleepycat.je.*;
 
-/** Physical row IDs for version 2 tables; older tables keep their original keys. */
+/** Physical row IDs for version 2 and later; older tables keep their original keys. */
 public final class RowIdentity {
     private RowIdentity() { }
 
@@ -84,31 +84,4 @@ public final class RowIdentity {
         }
     }
 
-    /** Other declared primary keys are unique values, independent of physical row IDs.
-     * Like SQLite rowid tables, they allow NULL unless explicitly declared NOT NULL.
-     * Validate the complete change before writing so a failed statement leaves no rows behind.
-     */
-    public static void validatePrimaryKeys(Table table, List<InsertRow> rows, Set<ByteBuffer> replaced) {
-        Column primaryKey = table.primaryKeyColumn();
-        if (!table.usesRowIds() || primaryKey == null || table.getRowIdColumn() >= 0 || rows.isEmpty()) {
-            return;
-        }
-        Set<Object> values = new HashSet<>();
-        for (InsertRow row : rows) {
-            Object value = row.getColumnValue(primaryKey.getIndex());
-            if (value != null && !values.add(SqlValues.key(value))) {
-                throw new IllegalArgumentException("Duplicate primary key: " + value);
-            }
-        }
-        if (values.isEmpty()) { return; }
-        try (TableIterator iterator = new TableIterator(table)) {
-            while (iterator.next()) {
-                if (replaced.contains(ByteBuffer.wrap(iterator.getKey()))) { continue; }
-                Object value = iterator.getColumnVal(primaryKey.getIndex());
-                if (value != null && values.contains(SqlValues.key(value))) {
-                    throw new IllegalArgumentException("Duplicate primary key: " + value);
-                }
-            }
-        }
-    }
 }

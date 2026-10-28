@@ -71,6 +71,7 @@ public class DBMS {
     static SQLStatement parse(String sql, List<?> parameters) {
         try {
             Parser parser = new Parser(new Lexer(new StringReader(sql)));
+            parser.setSourceSql(sql);
             SQLStatement statement = (SQLStatement) parser.parse().value;
             parser.bindParameters(parameters);
             return statement;

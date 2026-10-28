@@ -50,6 +50,11 @@ value to generate it, or create a table without a declared primary key and query
 its hidden `rowid`. Existing tables retain their stored format and key rules.
 See [row IDs and primary keys](docs/ROW_IDENTITY.md) for examples and limits.
 
+New schemas also support literal DEFAULT values, single-column UNIQUE constraints,
+CHECK expressions, and immediate foreign keys. Invalid writes are checked before
+modifying data, including changes that would leave orphaned child rows. See the
+[constraint guide](docs/CONSTRAINTS.md) for examples, persistence, and limitations.
+
 ## Verify and regenerate
 
 ```powershell

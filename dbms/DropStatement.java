@@ -14,6 +14,8 @@ public class DropStatement extends SQLStatement {
             throw new IllegalArgumentException(table + ": no such table");
         }
         table.setName(name);
+        table.open();
+        ConstraintValidator.validateDrop(table);
         table.close();
         Catalog.removeMetadata(table);
         DBMS.getEnv().removeDatabase(DBMS.getTransaction(), table.dbName());

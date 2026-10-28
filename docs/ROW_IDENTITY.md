@@ -71,6 +71,8 @@ Uniqueness currently uses a table scan rather than an index. Multi-row UPDATE
 checks final uniqueness; SQLite can reject some key swaps because it checks
 conflicts as individual rows change. Composite keys, WITHOUT ROWID tables,
 conflict clauses, and AUTOINCREMENT remain unsupported.
+Ordinary UNIQUE, CHECK, default, and foreign-key support is described in
+[CONSTRAINTS.md](CONSTRAINTS.md).
 
 ## Schema discovery
 
@@ -92,7 +94,8 @@ for row ID projections even when no rows match.
 | --- | --- | --- | --- |
 | Original, unversioned | Single-byte | 32 bits | Declared primary-key bytes |
 | Version 1 | UTF-8 | 64 bits | Declared primary-key bytes |
-| Version 2, new CREATE TABLE | UTF-8 | 64 bits | Internal row ID |
+| Version 2 | UTF-8 | 64 bits | Internal row ID |
+| Version 3, new CREATE TABLE | UTF-8 | 64 bits | Internal row ID; persisted defaults and constraints |
 
 Version 2 catalog records start with a zero marker, version byte, column-count
 byte, and signed-short row ID column index (`-1` if there is no alias). The
@@ -101,11 +104,14 @@ the ID's sign bit flipped so Berkeley DB's byte order matches signed integer
 order. The row payload keeps the existing signed-short offset header and
 32767-byte limit. Only an INTEGER PRIMARY KEY alias uses the key-value sentinel;
 other primary keys are stored in the payload like ordinary columns.
+Version 3 extends the catalog descriptors with defaults and constraints while
+keeping the same physical row representation.
 
-Opening an old database never migrates or rewrites its schemas. Old tables keep
-their declared or implicit first-column primary key, require explicit non-null
-keys, and do not expose hidden row IDs. Old and new formats can coexist in the
-same database. Migration of an existing table is separate future work.
+Opening an old database never migrates or rewrites its schemas. Original and
+version 1 tables keep their declared or implicit first-column primary key, require
+explicit non-null keys, and do not expose hidden row IDs. Version 2 tables retain
+their row IDs without acquiring new constraints. All formats can coexist in the
+same database. Schema migration remains separate future work.
 
 `python tests/run_tests.py` verifies SQLite comparisons, signed key boundaries,
 bound values, ID exhaustion fallback, old-format fixtures, statement atomicity,

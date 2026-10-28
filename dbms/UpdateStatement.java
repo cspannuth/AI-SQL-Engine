@@ -70,7 +70,7 @@ public class UpdateStatement extends SQLStatement {
                 throw new IllegalArgumentException("UPDATE conflicts with an existing primary key");
             }
         }
-        RowIdentity.validatePrimaryKeys(table, replacements, oldKeys);
+        ConstraintValidator.validateChange(table, replacements, oldKeys);
         for (byte[] key : originalKeys) {
             table.getDB().delete(DBMS.getTransaction(), new DatabaseEntry(key));
         }

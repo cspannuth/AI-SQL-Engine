@@ -1,11 +1,22 @@
 import java.util.*;
 import com.sleepycat.je.*;
 
-/** CREATE TABLE, retaining the project's single-primary-key schema. */
+/** CREATE TABLE with versioned column defaults and table constraints. */
 public class CreateStatement extends SQLStatement {
     private boolean ifNotExists;
+    private final List<String> checks;
+    private final List<ForeignKey> foreignKeys;
 
-    public CreateStatement(Table table, ArrayList<Column> columns) { super(table, columns); }
+    public CreateStatement(Table table, ArrayList<Column> columns) {
+        super(table, columns);
+        checks = List.of();
+        foreignKeys = List.of();
+    }
+    public CreateStatement(Table table, SchemaDefinition definition) {
+        super(table, definition.columns);
+        checks = definition.checks;
+        foreignKeys = definition.foreignKeys;
+    }
     public void setIfNotExists(boolean value) { ifNotExists = value; }
 
     protected void executeInternal() {
@@ -15,7 +26,7 @@ public class CreateStatement extends SQLStatement {
             throw new IllegalArgumentException(table + ": table already exists");
         }
         Set<String> names = new HashSet<>();
-        table.setStorageVersion(2);
+        table.setStorageVersion(3);
         int keys = 0;
         for (int i = 0; i < numColumns(); i++) {
             Column definition = getColumn(i);
@@ -38,6 +49,9 @@ public class CreateStatement extends SQLStatement {
                 && primaryKey.isDeclaredInteger()) {
             table.setRowIdColumn(primaryKey.getIndex());
         }
+        table.setChecks(checks);
+        table.setForeignKeys(foreignKeys);
+        ConstraintValidator.validateDefinition(table);
         if (Catalog.putMetadata(table) == OperationStatus.KEYEXIST) {
             throw new IllegalStateException("Table appeared during CREATE");
         }

@@ -9,10 +9,10 @@ remain in place.
 
 | Area | Implemented |
 | --- | --- |
-| Schema | CREATE TABLE, DROP TABLE, IF NOT EXISTS / IF EXISTS; inline or table-level single-column PRIMARY KEY; NOT NULL |
+| Schema | CREATE TABLE, DROP TABLE, IF NOT EXISTS / IF EXISTS; PRIMARY KEY, NOT NULL, single-column UNIQUE, CHECK, single-column REFERENCES/FOREIGN KEY |
 | Row identity | New tables have hidden rowid/oid/_rowid_ aliases; INTEGER PRIMARY KEY aliases the ID; omitted or NULL INSERT IDs are generated |
 | Types | INTEGER/INT, REAL/DOUBLE/FLOAT, CHAR(n), VARCHAR(n), TEXT; optional VARCHAR length and default CHAR length 1 |
-| Inserts | INSERT INTO ... VALUES (...), (...); optional, reordered column lists; constant expressions |
+| Inserts | INSERT INTO ... VALUES (...), (...); optional, reordered column lists; constant expressions; literal column defaults and DEFAULT VALUES |
 | Updates | UPDATE ... SET ... WHERE ...; expressions evaluated against the original row; primary-key changes; all-row updates |
 | Deletes | DELETE FROM ... WHERE ...; all-row deletion |
 | Transactions | BEGIN, BEGIN WORK, BEGIN TRANSACTION, COMMIT/END, ROLLBACK; optional WORK/TRANSACTION suffix; automatic statement transactions |
@@ -49,21 +49,27 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   dynamic storage classes and VARCHAR length behavior differ. Basic comparison
   affinity and numeric expression conversion are supported, but complete SQLite
   type/formatting behavior remains work.
-- **Storage:** new version 2 catalog records use UTF-8 and internal row ID keys.
+- **Storage:** new version 3 catalog records persist defaults and constraints,
+  retaining version 2's UTF-8 strings and internal row ID keys. Version 2 tables
+  remain readable and writable without rewriting their schemas.
   Version 1 tables retain UTF-8 and their primary-key byte representation.
   Unversioned tables retain their original single-byte encoding and integer
   widths; unsupported characters in those tables are rejected rather than
   corrupted. Existing data is not automatically rewritten. Stored row values
   retain signed-short offsets and a 32767-byte maximum, including the header.
-- **Constraints:** PRIMARY KEY and NOT NULL are implemented. Defaults, UNIQUE,
-  CHECK, foreign keys, AUTOINCREMENT, and ALTER TABLE remain work.
+- **Constraints:** literal DEFAULT, UNIQUE, CHECK, and immediate single-column
+  foreign keys are implemented alongside PRIMARY KEY and NOT NULL. Foreign keys
+  are always enforced, without a PRAGMA toggle. Composite constraints, named
+  constraints, expression/time defaults, foreign-key action clauses and deferral,
+  AUTOINCREMENT, and ALTER TABLE remain work. See [CONSTRAINTS.md](CONSTRAINTS.md)
+  for syntax, null handling, and validation limits.
 - **Query language:** subqueries, EXISTS, UNION/INTERSECT/EXCEPT, CTEs, window
   functions, CASE, CAST, general scalar/date functions, named parameters,
   NATURAL/USING/RIGHT/FULL joins, and custom collations remain work. Unsupported
   syntax fails rather than silently ignoring a clause.
 - **Writes:** INSERT ... SELECT, ON CONFLICT variants, RETURNING, and savepoints
   are absent. Duplicate INSERT columns and UPDATE assignments, including aliases
-  for the same row ID, are rejected. Multi-row primary-key
+  for the same row ID, are rejected. Multi-row primary-key and UNIQUE
   updates validate final uniqueness, which can differ from SQLite's immediate
   conflict checks. Logical mutation errors are detected before writing and
   preserve an explicit transaction's earlier statements. Storage failures
@@ -83,9 +89,10 @@ sources, runs engine assertions against disposable data, compares supported
 queries against Python's SQLite, and checks clean restarts, unfinished-transaction
 shutdown, forced process termination/recovery, and CLI error recovery.
 
-Golden fixtures check reading and updating the original unversioned and version 1
-storage formats. Row ID checks compare supported mutations against SQLite across
-JVM restarts. The runner hashes existing `dbms/db` files before and after verification.
+Golden fixtures check reading and updating unversioned, version 1, and version 2
+storage formats. Constraint and row ID checks compare supported mutations against
+SQLite across JVM restarts. The runner hashes existing `dbms/db` files before and
+after verification.
 These checks establish the tested cases, not general proof of SQLite parity,
 arbitrary crash safety, or concurrent isolation.
 

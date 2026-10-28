@@ -71,6 +71,11 @@ public final class SqlValues {
         return Double.isFinite(number.doubleValue()) ? number : value;
     }
 
+    /** Foreign-key equality uses the parent's affinity, regardless of the child's type. */
+    public static Object applyAffinity(Column parent, Object value) {
+        return value == null ? null : parent.getType() <= Column.REAL ? numericText(value) : value.toString();
+    }
+
     public static boolean like(String value, String pattern, boolean caseSensitive) {
         StringBuilder regex = new StringBuilder();
         for (int i = 0; i < pattern.length(); i++) {

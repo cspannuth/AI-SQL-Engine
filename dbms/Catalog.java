@@ -53,7 +53,7 @@ public class Catalog {
             throw new IllegalArgumentException("A table must contain between 1 and 255 columns");
         }
         try (RowOutput out = new RowOutput()) {
-            // Zero cannot be a legacy column count. Version 2 adds row identity.
+            // Zero cannot be a legacy column count. Versions 2/3 add row IDs/constraints.
             out.writeByte(0);
             out.writeByte(table.getStorageVersion());
             out.writeByte(table.numColumns());
@@ -70,6 +70,22 @@ public class Catalog {
                 out.writeInt(column.getLength());
                 out.writeBoolean(column.isNotNull());
                 out.writeBoolean(column.isPrimaryKey());
+                if (table.getStorageVersion() >= 3) {
+                    out.writeBoolean(column.isUnique());
+                    out.writeBoolean(column.hasDefault());
+                    if (column.hasDefault()) { writeText(out, Json.stringify(column.getDefaultValue())); }
+                }
+            }
+            if (table.getStorageVersion() >= 3) {
+                out.writeInt(table.getChecks().size());
+                for (String check : table.getChecks()) { writeText(out, check); }
+                out.writeInt(table.getForeignKeys().size());
+                for (ForeignKey reference : table.getForeignKeys()) {
+                    writeText(out, reference.column());
+                    writeText(out, reference.parentTable());
+                    out.writeBoolean(reference.parentColumn() != null);
+                    if (reference.parentColumn() != null) { writeText(out, reference.parentColumn()); }
+                }
             }
             return catalogDB.putNoOverwrite(DBMS.getTransaction(),
                     key(table.getName()), new DatabaseEntry(out.getBufferBytes()));
@@ -90,7 +106,7 @@ public class Catalog {
         Charset charset = StandardCharsets.ISO_8859_1;
         if (count == 0) {
             version = Byte.toUnsignedInt(in.readNextByte());
-            if (version != 1 && version != 2) {
+            if (version < 1 || version > 3) {
                 throw new IllegalStateException("Unknown schema format: " + version);
             }
             count = Byte.toUnsignedInt(in.readNextByte());
@@ -106,9 +122,38 @@ public class Catalog {
             column.setType(in.readNextByte());
             column.setLength(in.readNextInt());
             column.applyOpts(new ColumnOptions(in.readNextBoolean(), in.readNextBoolean()));
+            if (version >= 3) {
+                column.setUnique(in.readNextBoolean());
+                if (in.readNextBoolean()) { column.setDefaultValue(Json.parse(readText(in))); }
+            }
             table.addColumn(column);
         }
+        List<String> checks = new ArrayList<>();
+        List<ForeignKey> foreignKeys = new ArrayList<>();
+        if (version >= 3) {
+            int checkCount = in.readNextInt();
+            for (int i = 0; i < checkCount; i++) { checks.add(readText(in)); }
+            int referenceCount = in.readNextInt();
+            for (int i = 0; i < referenceCount; i++) {
+                String child = readText(in);
+                String parent = readText(in);
+                String parentColumn = in.readNextBoolean() ? readText(in) : null;
+                foreignKeys.add(new ForeignKey(child, parent, parentColumn));
+            }
+        }
+        table.setChecks(checks);
+        table.setForeignKeys(foreignKeys);
         return OperationStatus.SUCCESS;
+    }
+
+    private static void writeText(RowOutput out, String value) throws IOException {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        out.writeInt(bytes.length);
+        out.write(bytes);
+    }
+
+    private static String readText(RowInput in) {
+        return in.readNextString(in.readNextInt(), StandardCharsets.UTF_8);
     }
 
     public static OperationStatus removeMetadata(Table table) {

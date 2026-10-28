@@ -12,11 +12,14 @@ public class Table {
     private Charset stringCharset = StandardCharsets.UTF_8;
     private int storageVersion = 1;
     private int rowIdColumn = -1;
+    private List<String> checks = List.of();
+    private List<ForeignKey> foreignKeys = List.of();
 
     public Table(String name) { this.name = name; }
 
     public OperationStatus open() {
         Table cached = tableCache.get(name.toLowerCase(Locale.ROOT));
+        if (cached == this) { return OperationStatus.SUCCESS; }
         if (cached == null) {
             columns = null;
             if (Catalog.getMetadata(this) == OperationStatus.NOTFOUND) {
@@ -32,6 +35,8 @@ public class Table {
             stringCharset = cached.stringCharset;
             storageVersion = cached.storageVersion;
             rowIdColumn = cached.rowIdColumn;
+            checks = cached.checks;
+            foreignKeys = cached.foreignKeys;
             columns = new ArrayList<>();
             for (Column source : cached.columns) {
                 Column copy = new Column(source.getName(), this);
@@ -78,6 +83,10 @@ public class Table {
     public void setStorageVersion(int version) { storageVersion = version; }
     public int getRowIdColumn() { return rowIdColumn; }
     public void setRowIdColumn(int index) { rowIdColumn = index; }
+    public List<String> getChecks() { return checks; }
+    public void setChecks(List<String> values) { checks = List.copyOf(values); }
+    public List<ForeignKey> getForeignKeys() { return foreignKeys; }
+    public void setForeignKeys(List<ForeignKey> values) { foreignKeys = List.copyOf(values); }
 
     public String dbName() { return name + ".tab.db"; }
     public String getName() { return name; }

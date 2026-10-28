@@ -72,9 +72,15 @@ public final class DatabaseAdapter implements AutoCloseable {
         public static Retention defaults() { return new Retention(20, 33_554_432, Duration.ofMinutes(10)); }
     }
 
-    public record ColumnSchema(String name, String type, int byteLength, boolean nullable, boolean primaryKey) { }
-    public record TableSchema(String name, List<ColumnSchema> columns, boolean rowIdTable, String rowIdColumn) {
-        public TableSchema { columns = List.copyOf(columns); }
+    public record ColumnSchema(String name, String type, int byteLength, boolean nullable, boolean primaryKey,
+            boolean unique, boolean hasDefault, Object defaultValue) { }
+    public record TableSchema(String name, List<ColumnSchema> columns, boolean rowIdTable, String rowIdColumn,
+            List<String> checks, List<ForeignKey> foreignKeys) {
+        public TableSchema {
+            columns = List.copyOf(columns);
+            checks = List.copyOf(checks);
+            foreignKeys = List.copyOf(foreignKeys);
+        }
     }
     public record ResultColumn(String name, SqlType type) { }
     public record Capabilities(int apiVersion, String dialect, List<String> features,
@@ -141,6 +147,7 @@ public final class DatabaseAdapter implements AutoCloseable {
                 List.of("SELECT", "schema discovery", "positional scalar parameters", "INNER/CROSS/LEFT joins",
                         "GROUP BY/HAVING", "COUNT/SUM/AVG/TOTAL/MIN/MAX", "DISTINCT/ORDER BY/LIMIT",
                         "rowid tables for new schemas", "row/byte previews", "scan/working-data budgets",
+                        "DEFAULT/UNIQUE/CHECK/foreign-key metadata",
                         "cooperative deadline", "result retrieval"),
                 List.of("read-only adapter", "one serialized session", "no subqueries or CTEs",
                         "no persistent result history", "no snapshot version or multi-user authentication",
@@ -176,11 +183,13 @@ public final class DatabaseAdapter implements AutoCloseable {
                 boolean keyNotNull = column.isPrimaryKey() && !table.usesRowIds()
                         || i == table.getRowIdColumn();
                 columns.add(new ColumnSchema(column.getName(), types[column.getType()], column.getLength(),
-                        !column.isNotNull() && !keyNotNull, column.isPrimaryKey()));
+                        !column.isNotNull() && !keyNotNull, column.isPrimaryKey(), column.isUnique(),
+                        column.hasDefault(), column.getDefaultValue()));
             }
             String rowIdColumn = table.getRowIdColumn() < 0 ? null
                     : table.getColumn(table.getRowIdColumn()).getName();
-            return new TableSchema(table.getName(), columns, table.usesRowIds(), rowIdColumn);
+            return new TableSchema(table.getName(), columns, table.usesRowIds(), rowIdColumn,
+                    table.getChecks(), table.getForeignKeys());
         });
     }
 

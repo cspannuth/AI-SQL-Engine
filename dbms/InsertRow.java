@@ -86,6 +86,7 @@ public class InsertRow {
 
     public DatabaseEntry keyEntry() { return new DatabaseEntry(keyBuffer.getBufferBytes()); }
     public Object getColumnValue(int index) { return columnVals[index]; }
+    public Object[] getValues() { return columnVals.clone(); }
     public DatabaseEntry valueEntry() { return new DatabaseEntry(valueBuffer.getBufferBytes()); }
     public RowOutput getKeyBuffer() { return keyBuffer; }
     public RowOutput getValueBuffer() { return valueBuffer; }

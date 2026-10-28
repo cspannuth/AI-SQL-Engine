@@ -5,6 +5,7 @@ import com.sleepycat.je.*;
 /** INSERT with optional column lists and one or more VALUES rows. */
 public class InsertStatement extends SQLStatement {
     private final List<List<Object>> values = new ArrayList<>();
+    private boolean defaultValues;
 
     public InsertStatement(Table table, ArrayList<Column> columns, ArrayList<Object> values) {
         super(table, columns, values);
@@ -18,11 +19,17 @@ public class InsertStatement extends SQLStatement {
         return statement;
     }
 
+    public static InsertStatement defaults(Table table) {
+        InsertStatement statement = new InsertStatement(table, new ArrayList<>(), new ArrayList<>());
+        statement.defaultValues = true;
+        return statement;
+    }
+
     protected void executeInternal() {
         Table table = getTable(0);
         table.open();
         List<Column> targets = new ArrayList<>();
-        if (numColumns() == 0) {
+        if (numColumns() == 0 && !defaultValues) {
             for (int i = 0; i < table.numColumns(); i++) { targets.add(table.getColumn(i)); }
         } else {
             Set<Integer> assigned = new HashSet<>();
@@ -44,6 +51,10 @@ public class InsertStatement extends SQLStatement {
                 throw new IllegalArgumentException("Value count does not match the INSERT column count");
             }
             Object[] row = new Object[table.numColumns()];
+            for (int i = 0; i < row.length; i++) {
+                // An INTEGER PRIMARY KEY uses row ID allocation, even if it declares a default.
+                if (i != table.getRowIdColumn()) { row[i] = table.getColumn(i).getDefaultValue(); }
+            }
             Object requestedRowId = null;
             for (int i = 0; i < targets.size(); i++) {
                 Object value = input.get(i);
@@ -74,7 +85,7 @@ public class InsertStatement extends SQLStatement {
             }
             encoded.add(record);
         }
-        RowIdentity.validatePrimaryKeys(table, encoded, Collections.emptySet());
+        ConstraintValidator.validateChange(table, encoded, Collections.emptySet());
         // All logical validation precedes the first write.
         for (InsertRow record : encoded) {
             if (table.getDB().putNoOverwrite(DBMS.getTransaction(),

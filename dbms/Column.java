@@ -36,6 +36,9 @@ public class Column extends CompareTerm {
     private boolean isNotNull;
     private boolean isPrimaryKey;
     private boolean declaredInteger = true;
+    private boolean unique;
+    private boolean hasDefault;
+    private Object defaultValue;
     private Object updateVal;
     private boolean shouldUpdate;
     private int index;           // the index of the column in its table
@@ -79,6 +82,9 @@ public class Column extends CompareTerm {
         this.isNotNull = col.isNotNull;
         this.isPrimaryKey = col.isPrimaryKey;
         this.declaredInteger = col.declaredInteger;
+        this.unique = col.unique;
+        this.hasDefault = col.hasDefault;
+        this.defaultValue = col.defaultValue;
         this.index = col.index;
         this.updateVal = col.updateVal; 
         this.tableIter = col.tableIter;
@@ -326,6 +332,8 @@ public class Column extends CompareTerm {
         if (opts.isPrimaryKey()) {
             this.isPrimaryKey = true;
         }
+        if (opts.isUnique()) { unique = true; }
+        if (opts.hasDefault()) { setDefaultValue(opts.getDefaultValue()); }
     }
     
     /**
@@ -392,12 +400,20 @@ public class Column extends CompareTerm {
         this.isNotNull = other.isNotNull;
         this.isPrimaryKey = other.isPrimaryKey;
         this.declaredInteger = other.declaredInteger;
+        this.unique = other.unique;
+        this.hasDefault = other.hasDefault;
+        this.defaultValue = other.defaultValue;
         this.index = other.index;
     }
 
     /** SQLite aliases only the exact INTEGER type name to the physical row ID. */
     public boolean isDeclaredInteger() { return declaredInteger; }
     public void setDeclaredInteger(boolean value) { declaredInteger = value; }
+    public boolean isUnique() { return unique; }
+    public void setUnique(boolean value) { unique = value; }
+    public boolean hasDefault() { return hasDefault; }
+    public Object getDefaultValue() { return defaultValue; }
+    public void setDefaultValue(Object value) { hasDefault = true; defaultValue = value; }
     
     /**
      * Sets the table iterator used to obtain the values of this column.

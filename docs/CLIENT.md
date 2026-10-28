@@ -108,6 +108,9 @@ or startup banners in JSON mode. Keep stdin open to preserve the session.
 `describe_table` returns declared columns plus `rowIdTable` and `rowIdColumn`.
 New tables expose hidden row ID aliases; older tables retain their original key
 rules. See [row identity](ROW_IDENTITY.md) before querying hidden IDs.
+Column metadata also includes UNIQUE and default declarations, and table metadata
+includes CHECK SQL and foreign-key descriptors. See [constraints](CONSTRAINTS.md)
+for field meanings and supported behavior.
 
 `id` may be a string or signed 64-bit integer; omitted IDs return null. Unknown
 fields, duplicate object keys, invalid JSON, and unsupported types fail explicitly.

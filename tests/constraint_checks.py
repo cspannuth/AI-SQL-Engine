@@ -1,0 +1,206 @@
+"""Constraint comparisons with SQLite foreign-key enforcement enabled."""
+import sqlite3
+
+
+def check_constraints(classpath, home, run_engine):
+    statements = [
+        "CREATE TABLE defaults(id INTEGER PRIMARY KEY, label TEXT DEFAULT 'new', amount REAL DEFAULT -1.5, n INTEGER DEFAULT +2, missing TEXT DEFAULT NULL);",
+        "INSERT INTO defaults DEFAULT VALUES;",
+        "INSERT INTO defaults(label) VALUES(NULL),('explicit');",
+        "INSERT INTO defaults(n) VALUES(5);",
+        "SELECT * FROM defaults ORDER BY id;",
+        "CREATE TABLE default_key(id INTEGER PRIMARY KEY DEFAULT 10, name TEXT DEFAULT 'a;''b');",
+        "INSERT INTO default_key DEFAULT VALUES;",
+        "INSERT INTO default_key(id) VALUES(NULL);",
+        "INSERT INTO default_key DEFAULT VALUES;",
+        "SELECT * FROM default_key ORDER BY id;",
+        "CREATE TABLE required(value INTEGER DEFAULT 7 NOT NULL);",
+        "INSERT INTO required DEFAULT VALUES;",
+        "INSERT INTO required VALUES(NULL);",
+        "SELECT * FROM required;",
+        "CREATE TABLE null_default(value TEXT NOT NULL DEFAULT NULL);",
+        "INSERT INTO null_default DEFAULT VALUES;",
+        "SELECT * FROM null_default;",
+        "CREATE TABLE limits(a INTEGER DEFAULT -9223372036854775808, b INTEGER DEFAULT 9223372036854775807, label TEXT DEFAULT '\u00e9\u6f22');",
+        "INSERT INTO limits DEFAULT VALUES;",
+        "SELECT * FROM limits;",
+        "CREATE TABLE accounts(id INTEGER PRIMARY KEY,email TEXT UNIQUE,handle TEXT, UNIQUE(handle));",
+        "INSERT INTO accounts(email,handle) VALUES('a','one'),('b','two'),(NULL,NULL),(NULL,NULL);",
+        "INSERT INTO accounts(email) VALUES('c'),('a');",
+        "INSERT INTO accounts(handle) VALUES('three'),('two');",
+        "UPDATE accounts SET email='a' WHERE id=2;",
+        "UPDATE accounts SET handle='same' WHERE id<3;",
+        "SELECT * FROM accounts ORDER BY id;",
+        "UPDATE accounts SET email=NULL,handle=NULL WHERE id=1;",
+        "INSERT INTO accounts(email,handle) VALUES('a','one');",
+        "SELECT * FROM accounts ORDER BY id;",
+        "CREATE TABLE real_unique(value REAL UNIQUE);",
+        "INSERT INTO real_unique VALUES(0);",
+        "INSERT INTO real_unique VALUES(-0.0);",
+        "INSERT INTO real_unique VALUES(NULL),(NULL);",
+        "SELECT * FROM real_unique ORDER BY rowid;",
+        "CREATE TABLE checked(id INTEGER PRIMARY KEY, amount REAL DEFAULT 0 CHECK(amount>=0), low INTEGER, high INTEGER, CHECK(high>=low), CHECK(amount<100));",
+        "INSERT INTO checked DEFAULT VALUES;",
+        "INSERT INTO checked(amount,low,high) VALUES(10,1,2),(NULL,NULL,NULL);",
+        "INSERT INTO checked(amount) VALUES(20),(-1);",
+        "INSERT INTO checked(low,high) VALUES(5,4);",
+        "UPDATE checked SET amount=-1 WHERE id=1;",
+        "UPDATE checked SET high=low-1 WHERE low IS NOT NULL;",
+        "UPDATE checked SET amount=200;",
+        "SELECT * FROM checked ORDER BY id;",
+        "UPDATE checked SET low=5,high=6 WHERE id=1;",
+        "UPDATE checked SET low=high,high=low WHERE id=1;",
+        "SELECT * FROM checked ORDER BY id;",
+        "CREATE TABLE complex_checks(a INTEGER, b INTEGER, note TEXT, CHECK((a+1)*2 >= b AND note IN ('ok','a;''b') OR a IS NULL));",
+        "INSERT INTO complex_checks VALUES(2,5,'ok'),(NULL,99,'other');",
+        "INSERT INTO complex_checks VALUES(2,7,'ok');",
+        "INSERT INTO complex_checks VALUES(2,5,'bad');",
+        "SELECT * FROM complex_checks ORDER BY rowid;",
+        "CREATE TABLE scalar_check(value INTEGER CHECK(value));",
+        "INSERT INTO scalar_check VALUES(NULL),(1),(-1);",
+        "INSERT INTO scalar_check VALUES(0);",
+        "CREATE TABLE unknown_check(value INTEGER CHECK(missing>0));",
+        "CREATE TABLE aggregate_check(value INTEGER CHECK(SUM(value)>0));",
+        "CREATE TABLE hidden_check(value INTEGER CHECK(rowid>0));",
+        "INSERT INTO hidden_check VALUES(1);",
+        "INSERT INTO hidden_check(rowid,value) VALUES(-1,1);",
+        "UPDATE hidden_check SET rowid=-1;",
+        "CREATE TABLE explicit_rowid(rowid INTEGER CHECK(rowid>0));",
+        "INSERT INTO explicit_rowid VALUES(-1);",
+        "CREATE TABLE p(id INTEGER PRIMARY KEY,code TEXT UNIQUE);",
+        "CREATE TABLE c(id INTEGER PRIMARY KEY,pid INTEGER REFERENCES p,code TEXT,FOREIGN KEY(code) REFERENCES p(code));",
+        "INSERT INTO p VALUES(1,'one'),(2,'two'),(3,NULL);",
+        "INSERT INTO c VALUES(1,1,'one'),(2,2,'two'),(3,NULL,NULL);",
+        "INSERT INTO c VALUES(4,1,NULL),(5,99,NULL);",
+        "INSERT INTO c VALUES(4,NULL,'missing');",
+        "UPDATE c SET pid=99 WHERE id=1;",
+        "UPDATE c SET code='missing' WHERE id=1;",
+        "DELETE FROM p WHERE id=1;",
+        "UPDATE p SET id=10 WHERE id=1;",
+        "UPDATE p SET code='new' WHERE id=1;",
+        "SELECT * FROM p ORDER BY id;",
+        "SELECT * FROM c ORDER BY id;",
+        "DROP TABLE p;",
+        "UPDATE c SET pid=NULL,code=NULL WHERE id=1;",
+        "DELETE FROM p WHERE id=1;",
+        "INSERT INTO p VALUES(1,'one');",
+        "UPDATE p SET code=NULL WHERE id=3;",
+        "BEGIN;",
+        "INSERT INTO p VALUES(4,'four');",
+        "INSERT INTO c(pid) VALUES(4);",
+        "INSERT INTO c(pid) VALUES(4),(99);",
+        "UPDATE p SET id=40 WHERE id=4;",
+        "SELECT * FROM c ORDER BY id;",
+        "ROLLBACK;",
+        "SELECT * FROM p ORDER BY id;",
+        "SELECT * FROM c ORDER BY id;",
+        "BEGIN;",
+        "DELETE FROM c WHERE pid=2;",
+        "DELETE FROM p WHERE id=2;",
+        "ROLLBACK;",
+        "SELECT * FROM p ORDER BY id;",
+        "CREATE TABLE tree(id INTEGER PRIMARY KEY,parent_id INTEGER REFERENCES tree(id));",
+        "INSERT INTO tree VALUES(1,NULL),(2,1),(3,2);",
+        "INSERT INTO tree VALUES(4,5),(5,1);",
+        "INSERT INTO tree VALUES(6,7),(7,6);",
+        "INSERT INTO tree VALUES(8,9),(9,10);",
+        "DELETE FROM tree WHERE id=1;",
+        "UPDATE tree SET id=20 WHERE id=2;",
+        "SELECT * FROM tree ORDER BY id;",
+        "UPDATE tree SET id=id+100,parent_id=parent_id+100;",
+        "SELECT * FROM tree ORDER BY id;",
+        "DELETE FROM tree;",
+        "INSERT INTO tree VALUES(1,1);",
+        "UPDATE tree SET id=2,parent_id=2;",
+        "SELECT * FROM tree;",
+        "DROP TABLE tree;",
+        "CREATE TABLE forward_child(value INTEGER REFERENCES forward_parent(id));",
+        "INSERT INTO forward_child VALUES(NULL);",
+        "CREATE TABLE forward_parent(id INTEGER PRIMARY KEY);",
+        "INSERT INTO forward_parent VALUES(1);",
+        "INSERT INTO forward_child VALUES(1),(NULL);",
+        "DROP TABLE forward_parent;",
+        "DELETE FROM forward_child;",
+        "DROP TABLE forward_parent;",
+        "INSERT INTO forward_child VALUES(NULL);",
+        "DROP TABLE forward_child;",
+        "CREATE TABLE bad_parent(value INTEGER);",
+        "CREATE TABLE bad_child(value INTEGER REFERENCES bad_parent(value));",
+        "INSERT INTO bad_child VALUES(NULL);",
+        "DROP TABLE bad_parent;",
+        "DROP TABLE bad_child;",
+        "CREATE TABLE unknown_parent_column(value INTEGER REFERENCES p(missing));",
+        "INSERT INTO unknown_parent_column VALUES(NULL);",
+        "CREATE TABLE unknown_child(value INTEGER,FOREIGN KEY(missing) REFERENCES p(id));",
+        "CREATE TABLE text_parent(code TEXT UNIQUE);",
+        "CREATE TABLE number_child(code INTEGER REFERENCES text_parent(code));",
+        "INSERT INTO text_parent VALUES('1');",
+        "INSERT INTO number_child VALUES(1);",
+        "CREATE TABLE number_parent(code REAL UNIQUE);",
+        "CREATE TABLE text_child(code TEXT REFERENCES number_parent(code));",
+        "INSERT INTO number_parent VALUES(1.0);",
+        "INSERT INTO text_child VALUES('1'),('1.0'),('1e0');",
+        "INSERT INTO text_child VALUES('1x');",
+        "SELECT * FROM text_child ORDER BY rowid;",
+        "CREATE TABLE default_child(pid INTEGER DEFAULT 2 REFERENCES p(id));",
+        "INSERT INTO default_child DEFAULT VALUES;",
+        "CREATE TABLE missing_default(pid INTEGER DEFAULT 99 REFERENCES p(id));",
+        "INSERT INTO missing_default DEFAULT VALUES;",
+        "CREATE TABLE \"checks_\u6f22\"(\"value_\u6f22\" INTEGER DEFAULT 1 CHECK(\"value_\u6f22\">0), note TEXT DEFAULT '\u6f22' CHECK(note IN ('\u6f22',NULL)));",
+        "INSERT INTO \"checks_\u6f22\" DEFAULT VALUES;",
+        "SELECT * FROM \"checks_\u6f22\";",
+        "CREATE TABLE cascade_unsupported(pid INTEGER REFERENCES p(id) ON DELETE CASCADE);",
+        "CREATE TABLE deferred_unsupported(pid INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED);",
+    ]
+    # These last two are intentionally unsupported even though SQLite accepts them.
+    shared = statements[:-2]
+    reference = sqlite3.connect(":memory:", isolation_level=None)
+    reference.execute("PRAGMA foreign_keys=ON")
+    total = 0
+
+    def compare(batch):
+        nonlocal total
+        actual = run_engine(classpath, home, batch)
+        for sql, result in zip(batch, actual):
+            total += 1
+            try:
+                cursor = reference.execute(sql)
+                expected = [list(row) for row in cursor.fetchall()]
+            except sqlite3.Error as error:
+                if "error" not in result:
+                    raise AssertionError(f"SQLite rejected {sql!r}, engine accepted it: {error}")
+            else:
+                if "error" in result or result["rows"] != expected:
+                    raise AssertionError(f"{sql}\nSQLite: {expected}\nEngine: {result}")
+                if cursor.rowcount >= 0 and cursor.rowcount != result["affected"]:
+                    raise AssertionError(f"Wrong affected row count for {sql}: {result}")
+
+    try:
+        compare(shared)
+        compare([
+            "INSERT INTO defaults DEFAULT VALUES;",
+            "SELECT * FROM defaults ORDER BY id;",
+            "INSERT INTO accounts(email) VALUES('a');",
+            "INSERT INTO checked(amount) VALUES(-1);",
+            "INSERT INTO checked(low,high) VALUES(1,2);",
+            "SELECT * FROM checked ORDER BY id;",
+            "INSERT INTO c(pid) VALUES(99);",
+            "DELETE FROM p WHERE id=2;",
+            "UPDATE p SET code='new' WHERE id=2;",
+            "DROP TABLE p;",
+            "SELECT * FROM p ORDER BY id;",
+            "BEGIN;",
+            "CREATE TABLE rolled_schema(id INTEGER DEFAULT 1 UNIQUE CHECK(id>0) REFERENCES p(id));",
+            "INSERT INTO rolled_schema DEFAULT VALUES;",
+            "ROLLBACK;",
+            "SELECT * FROM rolled_schema;",
+            "INSERT INTO \"checks_\u6f22\"(\"value_\u6f22\") VALUES(0);",
+            "INSERT INTO \"checks_\u6f22\" DEFAULT VALUES;",
+            "SELECT * FROM \"checks_\u6f22\" ORDER BY rowid;",
+        ])
+        unsupported = run_engine(classpath, home, statements[-2:])
+        if not all("error" in result for result in unsupported):
+            raise AssertionError(f"Unsupported foreign-key clauses were silently accepted: {unsupported}")
+    finally:
+        reference.close()
+    print(f"Constraint SQLite comparisons passed: {total} statements, including a JVM restart")
