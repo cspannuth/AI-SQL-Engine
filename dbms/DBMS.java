@@ -87,6 +87,8 @@ public class DBMS {
         if (implicit) { transaction = env.beginTransaction(null, null); }
         try {
             statement.executeInternal();
+            // Read queries cannot introduce violations and must not scan unrelated tables.
+            if(implicit && !(statement instanceof QueryStatement)) { ConstraintValidator.validateDeferred(); }
             Table.cacheClose();
             if (implicit) {
                 Transaction completed = transaction;
@@ -102,30 +104,37 @@ public class DBMS {
                         || !transaction.isValid())) { rollbackTransaction(); }
             } catch (RuntimeException cleanup) { e.addSuppressed(cleanup); }
             throw e;
-        } finally { Table.cacheInit(); }
+        } finally { Table.cacheInit(); QueryContext.clearClock(); }
     }
 
     public static synchronized void beginTransaction() {
         if (transaction != null) { throw new IllegalArgumentException("A transaction is already active"); }
         transaction = env.beginTransaction(null, null);
+        Savepoints.clear();
     }
 
     public static synchronized void commitTransaction() {
         if (transaction == null) { throw new IllegalArgumentException("No transaction is active"); }
-        Table.cacheClose();
+        try { ConstraintValidator.validateDeferred(); }
+        finally { Table.cacheClose(); Table.cacheInit(); }
         Transaction completed = transaction;
         transaction = null;
         try { completed.commit(); }
-        finally { Table.cacheInit(); }
+        finally { Table.cacheInit(); Savepoints.clear(); }
     }
 
     public static synchronized void rollbackTransaction() {
         if (transaction == null) { throw new IllegalArgumentException("No transaction is active"); }
         Table.cacheClose();
+        boolean reopen=Savepoints.catalogRecreated;
+        if(reopen) { Catalog.close(); }
         Transaction aborted = transaction;
         transaction = null;
         try { aborted.abort(); }
-        finally { Table.cacheInit(); }
+        finally {
+            Table.cacheInit(); Savepoints.clear();
+            if(reopen) { Catalog.open(); }
+        }
     }
 
     /** Never commit an unfinished user transaction during shutdown. */

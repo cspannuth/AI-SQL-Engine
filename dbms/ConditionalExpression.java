@@ -2,6 +2,7 @@ import java.util.*;
 
 /** A SQL predicate. null is UNKNOWN; WHERE accepts only Boolean.TRUE. */
 public abstract class ConditionalExpression extends CompareTerm {
+    public List<QueryStatement> getSubqueries() { return CompareTerm.queries(left, right); }
     private final ConditionalExpression left;
     private final ConditionalExpression right;
 

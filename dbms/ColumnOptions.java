@@ -32,6 +32,13 @@ public class ColumnOptions {
         references.add(new ForeignKey(null, table, column));
         return this;
     }
+    public ColumnOptions references(ForeignKey reference) { references.add(reference); return this; }
+    public ColumnOptions deferred(boolean value) {
+        if(references.isEmpty()) { throw new IllegalArgumentException("DEFERRABLE requires REFERENCES"); }
+        int last=references.size()-1;
+        references.set(last,references.get(last).withDeferred(value));
+        return this;
+    }
 
     public boolean isNotNull() { return notNull; }
     public boolean isPrimaryKey() { return primaryKey; }

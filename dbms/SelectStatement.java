@@ -1,14 +1,14 @@
 import java.util.*;
 
 /** SELECT using nested-loop joins, grouping, projection, sorting, and limits. */
-public class SelectStatement extends SQLStatement {
+public class SelectStatement extends QueryStatement {
     public static final String STAR = "*";
     private final ArrayList<Object> selectList;
     private final FromClause from;
     private final ArrayList<CompareTerm> groupBy;
     private final ConditionalExpression having;
     private final ArrayList<OrderBy> orderBy;
-    private final Limit limit;
+    private Limit limit;
     private final boolean distinct;
     private boolean havingAliasesResolved;
 
@@ -32,16 +32,64 @@ public class SelectStatement extends SQLStatement {
     }
 
     public boolean distinctSpecified() { return distinct; }
+    QueryStatement tail(List<OrderBy> order, Limit limit) {
+        orderBy.clear(); orderBy.addAll(order); this.limit = limit; return this;
+    }
+    QueryResult describe() {
+        Evaluation evaluation = new Evaluation();
+        try (QueryContext.Scope mode = QueryContext.describing()) {
+            evaluation.prepare();
+            List<String> labels = new ArrayList<>();
+            List<SqlType> types = new ArrayList<>(), affinities = new ArrayList<>();
+            for (SelectItem item : evaluation.output) {
+                labels.add(item.label()); types.add(item.expression.getResultType()); affinities.add(item.expression.getAffinity());
+            }
+            return new QueryResult(labels,types,List.of(),null,affinities);
+        } finally { for (TableIterator iterator : evaluation.iterators) { iterator.close(); } }
+    }
+    void collectTables(Set<String> tables, Set<String> cteNames) {
+        for (Table table : from.tables) {
+            if (table instanceof QueryTable) { ((QueryTable)table).query.collectTables(tables,cteNames); }
+            else if (!cteNames.contains(table.getName())) { tables.add(table.getName()); }
+        }
+        for (CompareTerm expression : expressions()) {
+            for (QueryStatement query : expression.getSubqueries()) { query.collectTables(tables,cteNames); }
+        }
+    }
+    private List<CompareTerm> expressions() {
+        List<CompareTerm> result = new ArrayList<>();
+        for (Object item : selectList) { if (item instanceof SelectItem && !((SelectItem)item).wildcard) { result.add(((SelectItem)item).expression); } }
+        if (getWhere() != null) { result.add(getWhere()); }
+        if (having != null) { result.add(having); }
+        for (ConditionalExpression on : from.conditions) { if (on != null) { result.add(on); } }
+        result.addAll(groupBy);
+        for (OrderBy order : orderBy) { result.add(order.expression); }
+        return result;
+    }
 
     /** Used to compile a persisted CHECK expression without executing a query. */
     CompareTerm singleExpression() { return ((SelectItem) selectList.get(0)).expression; }
+
+    QueryResult explain() {
+        Evaluation evaluation = new Evaluation();
+        try (QueryContext.Scope mode = QueryContext.describing()) {
+            evaluation.prepare();
+            List<List<Object>> rows = new ArrayList<>();
+            for (int i = 0; i < evaluation.iterators.size(); i++) {
+                rows.add(List.of((long)i,0L,0L,evaluation.iterators.get(i).accessDescription()));
+            }
+            return new QueryResult(List.of("id","parent","notused","detail"), rows);
+        } finally { for (TableIterator iterator : evaluation.iterators) { iterator.close(); } }
+    }
 
     protected void executeInternal() {
         Evaluation evaluation = new Evaluation();
         try {
             evaluation.prepare();
-            evaluation.scan(0);
-            result = evaluation.finish();
+            try (QueryContext.Scope scope = QueryContext.sources(evaluation.iterators)) {
+                evaluation.scan(0);
+                result = evaluation.finish();
+            }
         } finally {
             for (TableIterator iterator : evaluation.iterators) { iterator.close(); }
         }
@@ -57,9 +105,11 @@ public class SelectStatement extends SQLStatement {
         int representativeAggregate = -1;
 
         void prepare() {
+            clearColumnReferences();
             QueryBudget.check();
             Set<String> names = new HashSet<>();
-            for (Table table : from.tables) {
+            for (Table source : from.tables) {
+                Table table = QueryContext.resolve(source);
                 table.open();
                 if (!names.add(table.getReferenceName().toLowerCase(Locale.ROOT))) {
                     throw new IllegalArgumentException("Duplicate table reference: " + table.getReferenceName());
@@ -119,6 +169,15 @@ public class SelectStatement extends SQLStatement {
                 for (Column column : condition.getColumns()) { addColumn(column); }
             }
             bindColumns(iterators);
+            try (QueryContext.Scope scope = QueryContext.sources(iterators)) {
+                for (CompareTerm expression : expressions()) {
+                    for (QueryStatement query : expression.getSubqueries()) { query.describeChecked(); }
+                }
+            }
+            for (int i = 0; i < iterators.size(); i++) {
+                QueryPlan.choose(iterators.get(i), getWhere(), i, iterators);
+                QueryPlan.choose(iterators.get(i), from.conditions.get(i), i, iterators);
+            }
             for (int i = 0; i < from.conditions.size(); i++) {
                 ConditionalExpression condition = from.conditions.get(i);
                 if (condition == null) { continue; }
@@ -279,9 +338,11 @@ public class SelectStatement extends SQLStatement {
             long count = limit == null ? rows.size() : Math.min(rows.size() - start, limit.getMax());
             List<String> labels = new ArrayList<>();
             List<SqlType> types = new ArrayList<>();
+            List<SqlType> affinities = new ArrayList<>();
             for (SelectItem item : output) {
                 labels.add(item.label());
                 types.add(item.expression.getResultType());
+                affinities.add(item.expression.getAffinity());
             }
             int end = start + (int) Math.min(count, QueryBudget.resultRowLimit());
             String truncated = count > QueryBudget.resultRowLimit() ? "ROWS" : null;
@@ -296,7 +357,7 @@ public class SelectStatement extends SQLStatement {
                 resultBytes += bytes;
                 values.add(row);
             }
-            return new QueryResult(labels, types, values, truncated);
+            return new QueryResult(labels, types, values, truncated, affinities);
         }
 
         class Group {

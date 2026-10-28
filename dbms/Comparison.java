@@ -2,6 +2,7 @@ import java.util.*;
 
 /** Scalar comparisons with SQL three-valued null semantics. */
 public class Comparison extends ConditionalExpression {
+    public List<QueryStatement> getSubqueries() { return CompareTerm.queries(left, right); }
     public static final int EQ = 0, NOTEQ = 1, LT = 2, GT = 3, LTEQ = 4, GTEQ = 5;
     public static final int LIKE = 6, CLIKE = 7, IS_NULL = 8, IS_NOT_NULL = 9;
     public static final int IS = 10, IS_NOT = 11;
@@ -27,15 +28,14 @@ public class Comparison extends ConditionalExpression {
     }
 
     public Boolean evaluate() {
-        Object a = left.getValue();
-        Object b = right == null ? null : right.getValue();
-        if (type == IS_NULL) { return a == null; }
-        if (type == IS_NOT_NULL) { return a != null; }
+        if (type == IS_NULL) { return left.getValue() == null; }
+        if (type == IS_NOT_NULL) { return left.getValue() != null; }
+        Object a,b;
         if (right != null && type != LIKE && type != CLIKE) {
             Object[] values = SqlValues.comparisonValues(left, right);
             a = values[0];
             b = values[1];
-        }
+        } else { a=left.getValue(); b=right==null ? null : right.getValue(); }
         if (type == IS || type == IS_NOT) {
             boolean equal = a == null || b == null ? a == b : SqlValues.compare(a, b) == 0;
             return type == IS ? equal : !equal;

@@ -1,7 +1,7 @@
 # Defaults and constraints
 
-New tables support literal defaults, single-column UNIQUE constraints, CHECK
-expressions, and single-column foreign keys. The engine enforces these rules
+New tables support literal defaults, single/composite keys, CHECK expressions,
+and single/composite foreign keys. The engine enforces these rules
 independently of the client or any AI workflow.
 
 ```sql
@@ -58,10 +58,13 @@ CREATE TABLE accounts (
 
 Non-null values must be unique on INSERT and UPDATE, including within the same
 multi-row statement. Multiple NULL values are allowed. Add NOT NULL when a value
-is required. Multiple independent UNIQUE columns are supported; composite UNIQUE
-constraints remain unsupported.
+is required. Composite UNIQUE and PRIMARY KEY declarations are supported as
+`UNIQUE(a,b)` and `PRIMARY KEY(a,b)`. Composite keys preserve their declared order.
+A key containing any NULL component does not conflict; use explicit NOT NULL
+where required. Composite primary keys keep a separate internal row ID.
 
-Uniqueness uses scans rather than secondary indexes. UPDATE checks the proposed
+Constraint validation currently uses scans; explicit UNIQUE indexes are also
+supported and maintained transactionally. UPDATE checks the proposed
 final state, so some key swaps can succeed where SQLite's checks on individual
 rows would reject them. This also applies to primary-key updates.
 
@@ -87,10 +90,12 @@ Unknown columns, aggregates, parameters, and unsupported expressions are rejecte
 when the table is created. Subqueries are not supported. CHECK SQL is persisted
 as UTF-8 and compiled by the normal parser when validating mutations; it is never
 executed as a separate query.
+Supported scalar functions can appear in CHECK. Clock-dependent date calls fail
+during mutation validation, matching the requirement for deterministic checks.
 
 ## Foreign keys
 
-Both forms reference a single parent column:
+Both forms can reference a single parent column:
 
 ```sql
 CREATE TABLE children (
@@ -105,10 +110,11 @@ CREATE TABLE other_children (
 );
 ```
 
-`REFERENCES customers` without a column list selects its single-column primary
-key. An explicit target must be a declared PRIMARY KEY or UNIQUE column; hidden
-row IDs are not valid foreign-key targets. A NULL child value does not require a
-matching parent. Comparisons apply the parent's type affinity.
+`REFERENCES customers` without a column list selects its primary key, in declared
+order. Composite syntax is `FOREIGN KEY(a,b) REFERENCES parent(x,y)`. The target
+must match a PRIMARY KEY or UNIQUE key (or a supported explicit UNIQUE index).
+Hidden row IDs are not valid foreign-key targets. Any NULL child component exempts
+that row from matching a parent. Comparisons apply the parent columns' affinities.
 
 Parent tables may be created after the child schema, including self-references.
 The parent and its key are resolved when validating mutations. Missing or invalid
@@ -117,15 +123,23 @@ even on mutations that leave the foreign-key column unchanged.
 
 The complete proposed statement is validated before writing. A self-reference can
 point to another row inserted in the same batch. Deleting or changing parent keys
-fails if surviving children would be orphaned. DROP TABLE also fails when another
-table has dependent non-null references. Dropping a self-referencing table is
+fails if surviving children would be orphaned under NO ACTION or RESTRICT.
+Supported actions also apply to DROP TABLE's implicit deletion. Dropping a self-referencing table is
 allowed because its own children are dropped with it. As in SQLite, DROP ignores
 malformed parent-key definitions when checking its implicit deletion.
 
-Declared foreign keys are always enforced. There is no PRAGMA toggle. Checks are
-immediate at statement completion, with default non-cascading NO ACTION behavior.
-Explicit ON DELETE/ON UPDATE clauses, cascades, deferred constraints, MATCH clauses,
-and composite foreign keys are unsupported. Comparisons with SQLite enable
+Declared foreign keys are always enforced. There is no PRAGMA toggle. ON DELETE
+and ON UPDATE support NO ACTION (the default), RESTRICT, CASCADE, SET NULL, and
+SET DEFAULT. Cascades are planned and checked as a complete change set before
+writing. Invalid child defaults, NOT NULL/CHECK failures, or uniqueness conflicts
+abort the entire statement. Referential action recursion is limited to depth 1000.
+
+Checks are immediate by default. `DEFERRABLE INITIALLY DEFERRED` checks at outer
+commit; a failed COMMIT leaves the transaction active so the reference can be
+repaired or rolled back. RESTRICT remains immediate. INITIALLY IMMEDIATE and
+NOT DEFERRABLE are accepted; MATCH is unsupported. Some multi-row/self-referential
+action ordering can differ from SQLite because validation uses proposed statement
+states. Comparisons with SQLite enable
 `PRAGMA foreign_keys=ON` in the reference database.
 
 ## Transactions, persistence, and metadata
@@ -136,12 +150,12 @@ statements in an explicit transaction. Storage failures retain the existing poli
 of rolling back the active transaction. BEGIN/COMMIT/ROLLBACK cover constrained
 rows and schemas; constraints survive restarts and process termination/recovery.
 
-New CREATE TABLE statements write catalog version 3. It extends version 2 with
-per-column UNIQUE/default flags and literal defaults, CHECK SQL, and foreign-key
-descriptors. The row key and payload encoding are unchanged from version 2.
-Original, version 1, and version 2 schemas remain readable and writable without
-being rewritten. Old tables acquire no new constraints automatically. ALTER TABLE
-and schema migration remain future work.
+New CREATE TABLE statements write catalog version 5, adding ordered/composite keys,
+foreign-key actions, and deferral. Version 3 introduced defaults/CHECK/references;
+version 4 separated schema version from row encoding for safe ALTER changes.
+Earlier versions remain readable and writable. ALTER ADD/RENAME is implemented;
+old tables acquire no constraints unless explicitly altered. Row keys and payloads
+retain their original encoding. See [SQL_FEATURES.md](SQL_FEATURES.md).
 
 Schema discovery returns declared metadata without reading table contents:
 
@@ -151,7 +165,10 @@ Schema discovery returns declared metadata without reading table contents:
 | Column `hasDefault` | Distinguishes DEFAULT NULL from no declared default |
 | Column `defaultValue` | Declared literal, including null; INTEGER PRIMARY KEY allocation still takes precedence |
 | Table `checks` | Column and table CHECK expressions as SQL text |
-| Table `foreignKeys` | `column`, `parentTable`, and `parentColumn`; null parent column means the primary key |
+| Table `primaryKeyColumns` | Primary-key names in declared order |
+| Table `uniqueKeys` | Composite UNIQUE column lists; single-column flags remain on columns |
+| Table `foreignKeys` | `columns`, `parentTable`, `parentColumns`, `onDelete`, `onUpdate`, `deferred`; empty parent list means the primary key; singular fields remain for compatibility |
+| Table `indexes` | Explicit index name, table, column, and uniqueness |
 
 These fields are available through `DatabaseAdapter.describeTable`, terminal
 `.schema`, and JSON Lines `describe_table`. Parent metadata and rows are not

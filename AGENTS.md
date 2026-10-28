@@ -32,6 +32,16 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `dbms/SchemaDefinition.java`, `ColumnOptions.java`: parser-time schema builders.
 - `dbms/ConstraintValidator.java`, `CheckConstraint.java`, `ForeignKey.java`:
   proposed-state validation, compiled CHECK expressions, and reference metadata.
+- `dbms/IndexCatalog.java`, `QueryPlan.java`: transactional secondary indexes and
+  equality access paths; `ExplainStatement.java` exposes plans.
+- `dbms/QueryStatement.java`, `QueryContext.java`, `QueryTable.java`: nested query
+  ASTs, lexical scopes, and derived/CTE data. Authorize all nested physical tables.
+- `dbms/CompositeTerm.java`, `Functions.java`, `DateFunctions.java`: scalar
+  expression traversal, validated functions, and UTC date/time behavior.
+- `dbms/MutationBatch.java`, `ReferentialActions.java`, `UpsertExecutor.java`:
+  prepared writes, recursive actions, and sequential conflict decisions.
+- `dbms/Savepoints.java`: raw in-memory savepoint snapshots; rebuild indexes on
+  rewind and reopen catalog handles correctly after an outer abort.
 - `dbms/InsertRow.java`, `TableIterator.java`, `RowInput.java`, `RowOutput.java`:
   row serialization, scans, and decoding.
 - `dbms/lib/`: bundled Berkeley DB JE 7.5.11, CUP, and JFlex JARs.
@@ -48,9 +58,12 @@ HAVING, ordering, scalar expressions, predicates, and limits. Consult
 remaining differences from SQLite. Results are returned through `QueryResult`;
 SQL failures propagate to the caller rather than only printing an error.
 New tables use internal row IDs; exact INTEGER PRIMARY KEY declarations alias
-them. New catalog version 3 persists literal defaults, UNIQUE, CHECK, and immediate
-single-column foreign keys. Validate complete statements before their first write;
-foreign keys are always enabled. Preserve version 0/1/2 storage behavior and test
+them. New catalog version 5 persists defaults, CHECK, ordered/composite keys,
+reference actions, and deferral. The separate row-format marker preserves legacy
+keys/encodings during ALTER. Validate prepared statements and referential actions
+before their first write; deferred references are checked at commit. Read queries
+must not trigger deferred validation or scan unauthorized tables. Foreign keys
+are always enabled. Preserve version 0–4 behavior and test
 older fixtures. See [docs/CONSTRAINTS.md](docs/CONSTRAINTS.md). The row format rules
 are documented in [docs/ROW_IDENTITY.md](docs/ROW_IDENTITY.md).
 
@@ -84,6 +97,7 @@ Build and verify from the repository root:
 ```text
 python scripts/build.py
 python tests/run_tests.py
+python tests/stage_checks.py --through savepoints
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`
@@ -111,6 +125,8 @@ without table rows. SQL execution remains an explicit deterministic request.
 - Enforce row, byte, scan/time, and request limits in execution. SQL LIMIT controls
   returned rows. Adapter calls install QueryBudget for scan/working-data limits
   and cooperative deadlines; ordinary engine calls remain unlimited by default.
+- Apply preview/output limits only to final query results. CTEs, subqueries, and
+  compounds must retain complete intermediate rows under scan/working-data budgets.
 - Keep adapter policies fixed per caller, bind parameter values as AST nodes, and
   preserve the distinction between truncated previews and complete query results.
 - Keep one controlled engine owner and serialize requests initially. Static state

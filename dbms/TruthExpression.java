@@ -2,6 +2,7 @@ import java.util.*;
 
 /** Interpret a scalar in WHERE, ON, HAVING, AND, OR, or NOT. */
 public class TruthExpression extends ConditionalExpression {
+    public List<QueryStatement> getSubqueries() { return expression.getSubqueries(); }
     private final CompareTerm expression;
 
     public TruthExpression(CompareTerm expression) { this.expression = expression; }

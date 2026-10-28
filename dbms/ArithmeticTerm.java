@@ -2,6 +2,7 @@ import java.util.*;
 
 /** Simple numeric arithmetic and SQLite-style string concatenation. */
 public class ArithmeticTerm extends CompareTerm {
+    public List<QueryStatement> getSubqueries() { return CompareTerm.queries(left, right); }
     private final String operator;
     private final CompareTerm left;
     private final CompareTerm right;

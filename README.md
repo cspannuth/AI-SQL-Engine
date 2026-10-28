@@ -50,10 +50,17 @@ value to generate it, or create a table without a declared primary key and query
 its hidden `rowid`. Existing tables retain their stored format and key rules.
 See [row IDs and primary keys](docs/ROW_IDENTITY.md) for examples and limits.
 
-New schemas also support literal DEFAULT values, single-column UNIQUE constraints,
-CHECK expressions, and immediate foreign keys. Invalid writes are checked before
+New schemas also support literal DEFAULT values, composite keys, CHECK expressions,
+foreign-key actions and deferral. Invalid immediate writes are checked before
 modifying data, including changes that would leave orphaned child rows. See the
 [constraint guide](docs/CONSTRAINTS.md) for examples, persistence, and limitations.
+
+The next six engine stages are implemented: ALTER additions/renames, persistent
+indexes and equality plans, subqueries/CTEs/compounds, CASE/CAST and scalar functions,
+INSERT SELECT/UPSERT/RETURNING, and composite integrity/savepoints. Read the
+[feature examples](docs/SQL_FEATURES.md) and [stage report](docs/IMPLEMENTATION_STAGES.md)
+for supported forms, tests, and remaining limits. This is still a SQLite-oriented
+subset, with one serialized session and materialized working data.
 
 ## Verify and regenerate
 

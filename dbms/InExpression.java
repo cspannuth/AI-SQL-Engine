@@ -2,6 +2,11 @@ import java.util.*;
 
 /** Scalar IN lists, including SQL's UNKNOWN result when a list contains NULL. */
 public class InExpression extends ConditionalExpression {
+    public List<QueryStatement> getSubqueries() {
+        List<QueryStatement> queries = new ArrayList<>(expression.getSubqueries());
+        for (CompareTerm value : values) { queries.addAll(value.getSubqueries()); }
+        return queries;
+    }
     private final CompareTerm expression;
     private final List<CompareTerm> values;
 

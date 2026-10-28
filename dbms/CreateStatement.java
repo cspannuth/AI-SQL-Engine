@@ -6,6 +6,8 @@ public class CreateStatement extends SQLStatement {
     private boolean ifNotExists;
     private final List<String> checks;
     private final List<ForeignKey> foreignKeys;
+    private List<String> primaryColumns=List.of();
+    private List<List<String>> uniqueKeys=List.of();
 
     public CreateStatement(Table table, ArrayList<Column> columns) {
         super(table, columns);
@@ -16,17 +18,20 @@ public class CreateStatement extends SQLStatement {
         super(table, definition.columns);
         checks = definition.checks;
         foreignKeys = definition.foreignKeys;
+        primaryColumns=definition.primaryColumns;
+        uniqueKeys=definition.uniqueKeys;
     }
     public void setIfNotExists(boolean value) { ifNotExists = value; }
 
     protected void executeInternal() {
         Table table = getTable(0);
+        if (IndexCatalog.find(table.getName()) != null) { throw new IllegalArgumentException("Name belongs to an index"); }
         if (Catalog.findName(table.getName()) != null) {
             if (ifNotExists) { result = QueryResult.changed("Table already exists.", 0); return; }
             throw new IllegalArgumentException(table + ": table already exists");
         }
         Set<String> names = new HashSet<>();
-        table.setStorageVersion(3);
+        table.setStorageVersion(5);
         int keys = 0;
         for (int i = 0; i < numColumns(); i++) {
             Column definition = getColumn(i);
@@ -43,7 +48,9 @@ public class CreateStatement extends SQLStatement {
             if (column.getType() == Column.INTEGER) { column.setLength(8); }
             table.addColumn(column);
         }
-        if (keys > 1) { throw new IllegalArgumentException("Only one primary-key column is supported"); }
+        if (keys > 1 && primaryColumns.size()!=keys) { throw new IllegalArgumentException("More than one primary key"); }
+        table.setPrimaryKeyColumns(primaryColumns);
+        table.setUniqueKeys(uniqueKeys);
         Column primaryKey = table.primaryKeyColumn();
         if (primaryKey != null && primaryKey.getType() == Column.INTEGER
                 && primaryKey.isDeclaredInteger()) {

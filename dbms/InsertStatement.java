@@ -6,6 +6,9 @@ import com.sleepycat.je.*;
 public class InsertStatement extends SQLStatement {
     private final List<List<Object>> values = new ArrayList<>();
     private boolean defaultValues;
+    private QueryStatement source;
+    private Upsert upsert;
+    private List<Object> returning;
 
     public InsertStatement(Table table, ArrayList<Column> columns, ArrayList<Object> values) {
         super(table, columns, values);
@@ -23,6 +26,15 @@ public class InsertStatement extends SQLStatement {
         InsertStatement statement = new InsertStatement(table, new ArrayList<>(), new ArrayList<>());
         statement.defaultValues = true;
         return statement;
+    }
+    public static InsertStatement fromQuery(Table table,ArrayList<Column> columns,QueryStatement source) {
+        InsertStatement statement=new InsertStatement(table,columns,new ArrayList<>());
+        statement.source=source;
+        return statement;
+    }
+    void configure(Upsert upsert,List<Object> returning) {
+        if(defaultValues && upsert!=null) { throw new IllegalArgumentException("DEFAULT VALUES cannot have ON CONFLICT"); }
+        this.upsert=upsert; this.returning=returning;
     }
 
     protected void executeInternal() {
@@ -43,41 +55,24 @@ public class InsertStatement extends SQLStatement {
                 targets.add(match);
             }
         }
+        List<List<Object>> inputs=values;
+        if(source!=null) {
+            QueryResult selected=source.nested();
+            if(selected.getColumns().size()!=targets.size()) { throw new IllegalArgumentException("INSERT query column count differs from its target"); }
+            inputs=selected.getRows();
+        }
+        if(upsert!=null) { result=UpsertExecutor.execute(table,targets,inputs,upsert,returning); return; }
         List<InsertRow> encoded = new ArrayList<>();
         Set<ByteBuffer> keys = new HashSet<>();
         RowIdentity.Allocator rowIds = table.usesRowIds() ? new RowIdentity.Allocator(table) : null;
-        for (List<Object> input : values) {
-            if (input.size() != targets.size()) {
-                throw new IllegalArgumentException("Value count does not match the INSERT column count");
-            }
-            Object[] row = new Object[table.numColumns()];
-            for (int i = 0; i < row.length; i++) {
-                // An INTEGER PRIMARY KEY uses row ID allocation, even if it declares a default.
-                if (i != table.getRowIdColumn()) { row[i] = table.getColumn(i).getDefaultValue(); }
-            }
-            Object requestedRowId = null;
-            for (int i = 0; i < targets.size(); i++) {
-                Object value = input.get(i);
-                if (value instanceof CompareTerm) {
-                    CompareTerm expression = (CompareTerm) value;
-                    if (!expression.getColumns().isEmpty() || !expression.getAggregates().isEmpty()) {
-                        throw new IllegalArgumentException("VALUES expressions must be constant");
-                    }
-                    value = expression.getValue();
-                }
-                int index = targets.get(i).getIndex();
-                if (index == table.numColumns()) { requestedRowId = value; }
-                else { row[index] = value; }
-            }
+        for (List<Object> input : inputs) {
+            InsertValues.Input row=InsertValues.evaluate(table,targets,input);
             Long rowId = null;
             if (rowIds != null) {
                 int alias = table.getRowIdColumn();
-                rowId = rowIds.next(alias >= 0 ? row[alias] : requestedRowId);
-                if (alias >= 0) { row[alias] = rowId; }
+                rowId = rowIds.next(alias >= 0 ? row.values()[alias] : row.requestedRowId());
             }
-            for (int i = 0; i < row.length; i++) { row[i] = table.getColumn(i).adjustValue(row[i]); }
-            InsertRow record = new InsertRow(table, row, rowId);
-            record.marshall();
+            InsertRow record = InsertValues.encode(table,row,rowId);
             if (!keys.add(ByteBuffer.wrap(record.keyEntry().getData()))
                     || table.getDB().get(DBMS.getTransaction(), record.keyEntry(),
                             new DatabaseEntry(), null) == OperationStatus.SUCCESS) {
@@ -85,14 +80,10 @@ public class InsertStatement extends SQLStatement {
             }
             encoded.add(record);
         }
-        ConstraintValidator.validateChange(table, encoded, Collections.emptySet());
-        // All logical validation precedes the first write.
-        for (InsertRow record : encoded) {
-            if (table.getDB().putNoOverwrite(DBMS.getTransaction(),
-                    record.keyEntry(), record.valueEntry()) != OperationStatus.SUCCESS) {
-                throw new IllegalStateException("Primary-key conflict during INSERT");
-            }
-        }
-        result = QueryResult.changed("Added " + encoded.size() + " row(s) to " + table + ".", encoded.size());
+        MutationBatch batch=MutationBatch.prepare(table,encoded,Set.of(),Map.of());
+        List<Object[]> snapshots=new ArrayList<>();
+        if(returning!=null) { for(InsertRow record:encoded) { snapshots.add(InsertValues.snapshot(table,record)); } }
+        result=Returning.evaluate(table,returning,snapshots,encoded.size(),"Added "+encoded.size()+" row(s) to "+table+".");
+        batch.write();
     }
 }

@@ -4,6 +4,8 @@ import com.sleepycat.je.*;
 
 /** DELETE scans and validates before modifying any stored rows. */
 public class DeleteStatement extends SQLStatement {
+    private List<Object> returning;
+    void setReturning(List<Object> values) { returning=values; }
     public DeleteStatement(Table table, ConditionalExpression where) { super(table, null, where); }
 
     protected void executeInternal() {
@@ -14,18 +16,22 @@ public class DeleteStatement extends SQLStatement {
         }
         List<byte[]> keys = new ArrayList<>();
         Set<ByteBuffer> removed = new HashSet<>();
-        try (TableIterator iterator = new TableIterator(this, table, true)) {
+        List<Object[]> snapshots=new ArrayList<>();
+        try (TableIterator iterator = new TableIterator(this, table, true);
+             QueryContext.Scope scope=QueryContext.sources(List.of(iterator))) {
             bindColumns(List.of(iterator));
+            if(getWhere()!=null) { for(QueryStatement query:getWhere().getSubqueries()) { query.describeChecked(); } }
             while (iterator.next()) {
                 byte[] key = iterator.getKey();
                 keys.add(key);
                 removed.add(ByteBuffer.wrap(key));
+                if(returning!=null) { snapshots.add(iterator.getSnapshot()); }
             }
         }
-        ConstraintValidator.validateChange(table, List.of(), removed);
-        for (byte[] key : keys) {
-            table.getDB().delete(DBMS.getTransaction(), new DatabaseEntry(key));
-        }
-        result = QueryResult.changed("Deleted " + keys.size() + " row(s).", keys.size());
+        Map<ByteBuffer,InsertRow> updates=new LinkedHashMap<>();
+        for(ByteBuffer key:removed) { updates.put(key,null); }
+        MutationBatch batch=MutationBatch.prepare(table,List.of(),removed,updates);
+        result=Returning.evaluate(table,returning,snapshots,keys.size(),"Deleted "+keys.size()+" row(s).");
+        batch.write();
     }
 }

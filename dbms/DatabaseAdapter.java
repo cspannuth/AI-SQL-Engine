@@ -75,11 +75,15 @@ public final class DatabaseAdapter implements AutoCloseable {
     public record ColumnSchema(String name, String type, int byteLength, boolean nullable, boolean primaryKey,
             boolean unique, boolean hasDefault, Object defaultValue) { }
     public record TableSchema(String name, List<ColumnSchema> columns, boolean rowIdTable, String rowIdColumn,
-            List<String> checks, List<ForeignKey> foreignKeys) {
+            List<String> checks, List<ForeignKey> foreignKeys, List<IndexDefinition> indexes,
+            List<String> primaryKeyColumns,List<List<String>> uniqueKeys) {
         public TableSchema {
             columns = List.copyOf(columns);
             checks = List.copyOf(checks);
             foreignKeys = List.copyOf(foreignKeys);
+            indexes = List.copyOf(indexes);
+            primaryKeyColumns=List.copyOf(primaryKeyColumns);
+            uniqueKeys=uniqueKeys.stream().map(List::copyOf).toList();
         }
     }
     public record ResultColumn(String name, SqlType type) { }
@@ -146,10 +150,13 @@ public final class DatabaseAdapter implements AutoCloseable {
         return read(null, maximumLimits, budget -> new Capabilities(1, "custom SQLite-oriented SQL subset",
                 List.of("SELECT", "schema discovery", "positional scalar parameters", "INNER/CROSS/LEFT joins",
                         "GROUP BY/HAVING", "COUNT/SUM/AVG/TOTAL/MIN/MAX", "DISTINCT/ORDER BY/LIMIT",
+                        "scalar/correlated subqueries and EXISTS", "ordinary WITH CTEs and derived tables",
+                        "UNION/UNION ALL/INTERSECT/EXCEPT", "CASE/CAST and scalar text/numeric/UTC functions",
+                        "persistent equality indexes and EXPLAIN QUERY PLAN",
                         "rowid tables for new schemas", "row/byte previews", "scan/working-data budgets",
-                        "DEFAULT/UNIQUE/CHECK/foreign-key metadata",
+                        "DEFAULT/CHECK/composite-key/reference-action/index metadata",
                         "cooperative deadline", "result retrieval"),
-                List.of("read-only adapter", "one serialized session", "no subqueries or CTEs",
+                List.of("read-only adapter", "one serialized session", "no recursive CTEs or window functions",
                         "no persistent result history", "no snapshot version or multi-user authentication",
                         "working bytes estimate payload rather than total heap", "deadline cannot preempt blocking code"),
                 maximumLimits, retention, MAX_REQUEST_BYTES, MAX_PARAMETERS, MAX_SQL_TOKENS, MAX_SQL_NESTING));
@@ -189,7 +196,8 @@ public final class DatabaseAdapter implements AutoCloseable {
             String rowIdColumn = table.getRowIdColumn() < 0 ? null
                     : table.getColumn(table.getRowIdColumn()).getName();
             return new TableSchema(table.getName(), columns, table.usesRowIds(), rowIdColumn,
-                    table.getChecks(), table.getForeignKeys());
+                    table.getChecks(), table.getForeignKeys(), IndexCatalog.forTable(table.getName()),
+                    table.getPrimaryKeyColumns(),table.getUniqueKeys());
         });
     }
 
@@ -204,10 +212,10 @@ public final class DatabaseAdapter implements AutoCloseable {
             long started = System.nanoTime();
             List<Object> bound = validateRequest(sql, parameters);
             SQLStatement statement = DBMS.parse(sql, bound);
-            if (!(statement instanceof SelectStatement)) {
-                throw error(ErrorCode.ACCESS_DENIED, "Only SELECT statements are allowed", requestId, null);
+            if (!(statement instanceof QueryStatement)) {
+                throw error(ErrorCode.ACCESS_DENIED, "Only read queries are allowed", requestId, null);
             }
-            for (int i = 0; i < statement.numTables(); i++) { authorize(statement.getTable(i).getName()); }
+            for (String table : ((QueryStatement)statement).readTables()) { authorize(table); }
             statement.execute();
             QueryBudget.check();
             QueryResult result = statement.getResult();

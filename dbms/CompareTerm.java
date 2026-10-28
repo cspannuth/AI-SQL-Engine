@@ -19,5 +19,14 @@ public class CompareTerm {
     public SqlType getResultType() { return SqlType.of(getValue()); }
     public List<Column> getColumns() { return List.of(); }
     public List<AggregateTerm> getAggregates() { return List.of(); }
+    public List<QueryStatement> getSubqueries() { return List.of(); }
+    public SqlType getAffinity() { return SqlType.UNKNOWN; }
+    static List<QueryStatement> queries(CompareTerm... expressions) {
+        java.util.ArrayList<QueryStatement> result = new java.util.ArrayList<>();
+        for (CompareTerm expression : expressions) {
+            if (expression != null) { result.addAll(expression.getSubqueries()); }
+        }
+        return result;
+    }
     public String toString() { return value == null ? "NULL" : value.toString(); }
 }

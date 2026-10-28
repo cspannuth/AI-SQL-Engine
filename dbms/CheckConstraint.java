@@ -8,8 +8,8 @@ final class CheckConstraint {
     CheckConstraint(String sql, Table table, TableIterator iterator) {
         this.sql = sql;
         expression = ((SelectStatement) DBMS.parse("SELECT " + sql + ";", List.of())).singleExpression();
-        if (!expression.getAggregates().isEmpty()) {
-            throw new IllegalArgumentException("Aggregates are not allowed in CHECK");
+        if (!expression.getAggregates().isEmpty() || !expression.getSubqueries().isEmpty()) {
+            throw new IllegalArgumentException("Aggregates and subqueries are not allowed in CHECK");
         }
         for (Column reference : expression.getColumns()) {
             Column match = table.resolveColumn(reference);
@@ -20,9 +20,11 @@ final class CheckConstraint {
     }
 
     void validate() {
-        Object value = expression.getValue();
-        if (value != null && SqlValues.number(value).doubleValue() == 0) {
-            throw new IllegalArgumentException("CHECK constraint failed: " + sql);
+        try (QueryContext.Scope scope = DateFunctions.checkingSchema()) {
+            Object value = expression.getValue();
+            if (value != null && SqlValues.number(value).doubleValue() == 0) {
+                throw new IllegalArgumentException("CHECK constraint failed: " + sql);
+            }
         }
     }
 }

@@ -5,6 +5,8 @@ import com.sleepycat.je.*;
 /** UPDATE evaluates assignments against each original row, then writes atomically. */
 public class UpdateStatement extends SQLStatement {
     private final List<Column> assignments;
+    private List<Object> returning;
+    void setReturning(List<Object> values) { returning=values; }
 
     public UpdateStatement(Table table, ArrayList<Column> columns, ConditionalExpression where) {
         super(table, columns, where);
@@ -29,7 +31,8 @@ public class UpdateStatement extends SQLStatement {
         List<InsertRow> replacements = new ArrayList<>();
         Set<ByteBuffer> oldKeys = new HashSet<>();
         Set<ByteBuffer> newKeys = new HashSet<>();
-        try (TableIterator iterator = new TableIterator(this, table, true)) {
+        try (TableIterator iterator = new TableIterator(this, table, true);
+             QueryContext.Scope scope=QueryContext.sources(List.of(iterator))) {
             bindColumns(List.of(iterator));
             for (Column assignment : assignments) {
                 if (!assigned.add(assignment.getIndex())) {
@@ -39,7 +42,11 @@ public class UpdateStatement extends SQLStatement {
                         && !((CompareTerm) assignment.getUpdateVal()).getAggregates().isEmpty()) {
                     throw new IllegalArgumentException("Aggregates are not allowed in UPDATE");
                 }
+                if(assignment.getUpdateVal() instanceof CompareTerm) {
+                    for(QueryStatement query:((CompareTerm)assignment.getUpdateVal()).getSubqueries()) { query.describeChecked(); }
+                }
             }
+            if(getWhere()!=null) { for(QueryStatement query:getWhere().getSubqueries()) { query.describeChecked(); } }
             while (iterator.next()) {
                 Object[] row = iterator.getRow();
                 Long rowId = table.usesRowIds() ? RowIdentity.value(new DatabaseEntry(iterator.getKey())) : null;
@@ -70,13 +77,14 @@ public class UpdateStatement extends SQLStatement {
                 throw new IllegalArgumentException("UPDATE conflicts with an existing primary key");
             }
         }
-        ConstraintValidator.validateChange(table, replacements, oldKeys);
-        for (byte[] key : originalKeys) {
-            table.getDB().delete(DBMS.getTransaction(), new DatabaseEntry(key));
+        Map<ByteBuffer,InsertRow> updates=new LinkedHashMap<>();
+        List<Object[]> snapshots=new ArrayList<>();
+        for(int i=0;i<replacements.size();i++) {
+            updates.put(ByteBuffer.wrap(originalKeys.get(i)),replacements.get(i));
+            if(returning!=null) { snapshots.add(InsertValues.snapshot(table,replacements.get(i))); }
         }
-        for (InsertRow row : replacements) {
-            table.getDB().put(DBMS.getTransaction(), row.keyEntry(), row.valueEntry());
-        }
-        result = QueryResult.changed("Updated " + replacements.size() + " row(s).", replacements.size());
+        MutationBatch batch=MutationBatch.prepare(table,replacements,oldKeys,updates);
+        result=Returning.evaluate(table,returning,snapshots,replacements.size(),"Updated "+replacements.size()+" row(s).");
+        batch.write();
     }
 }

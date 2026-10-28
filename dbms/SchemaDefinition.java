@@ -6,12 +6,14 @@ public final class SchemaDefinition {
     final List<String> checks = new ArrayList<>();
     final List<ForeignKey> foreignKeys = new ArrayList<>();
     private boolean columnsFinished;
+    final List<String> primaryColumns=new ArrayList<>();
+    final List<List<String>> uniqueKeys=new ArrayList<>();
 
     public SchemaDefinition addColumn(Column column, ColumnOptions options) {
         columns.add(column);
         checks.addAll(options.checks);
         for (ForeignKey reference : options.references) {
-            foreignKeys.add(new ForeignKey(column.getName(), reference.parentTable(), reference.parentColumn()));
+            foreignKeys.add(reference.withColumns(List.of(column.getName())));
         }
         return this;
     }
@@ -34,9 +36,18 @@ public final class SchemaDefinition {
     }
 
     public void primaryKey(String name) {
+        primaryKey(List.of(name));
+    }
+    public void primaryKey(List<String> names) {
         for (Column column : columns) {
             if (column.isPrimaryKey()) { throw new IllegalArgumentException("More than one primary key"); }
         }
-        column(name).applyOpts(new ColumnOptions(false, true));
+        if(new TreeSet<>(names).size()!=names.size()) { throw new IllegalArgumentException("Repeated primary-key column"); }
+        for(String name:names) { column(name).applyOpts(new ColumnOptions(false,true)); }
+        primaryColumns.addAll(names);
+    }
+    public void uniqueKey(List<String> names) {
+        for(String name:names) { column(name); }
+        if(names.size()==1) { column(names.get(0)).setUnique(true); } else { uniqueKeys.add(List.copyOf(names)); }
     }
 }

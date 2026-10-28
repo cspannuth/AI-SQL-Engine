@@ -149,11 +149,10 @@ def check_constraints(classpath, home, run_engine):
         "CREATE TABLE \"checks_\u6f22\"(\"value_\u6f22\" INTEGER DEFAULT 1 CHECK(\"value_\u6f22\">0), note TEXT DEFAULT '\u6f22' CHECK(note IN ('\u6f22',NULL)));",
         "INSERT INTO \"checks_\u6f22\" DEFAULT VALUES;",
         "SELECT * FROM \"checks_\u6f22\";",
-        "CREATE TABLE cascade_unsupported(pid INTEGER REFERENCES p(id) ON DELETE CASCADE);",
-        "CREATE TABLE deferred_unsupported(pid INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED);",
+        "CREATE TABLE cascading_reference(pid INTEGER REFERENCES p(id) ON DELETE CASCADE);",
+        "CREATE TABLE deferred_reference(pid INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED);",
     ]
-    # These last two are intentionally unsupported even though SQLite accepts them.
-    shared = statements[:-2]
+    shared = statements
     reference = sqlite3.connect(":memory:", isolation_level=None)
     reference.execute("PRAGMA foreign_keys=ON")
     total = 0
@@ -198,7 +197,10 @@ def check_constraints(classpath, home, run_engine):
             "INSERT INTO \"checks_\u6f22\" DEFAULT VALUES;",
             "SELECT * FROM \"checks_\u6f22\" ORDER BY rowid;",
         ])
-        unsupported = run_engine(classpath, home, statements[-2:])
+        unsupported = run_engine(classpath, home, [
+            "CREATE TABLE unsupported_match(pid INTEGER REFERENCES p(id) MATCH FULL);",
+            "CREATE TABLE unsupported_without(id INTEGER PRIMARY KEY) WITHOUT ROWID;",
+        ])
         if not all("error" in result for result in unsupported):
             raise AssertionError(f"Unsupported foreign-key clauses were silently accepted: {unsupported}")
     finally:

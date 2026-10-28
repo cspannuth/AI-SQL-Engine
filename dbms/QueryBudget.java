@@ -19,6 +19,7 @@ public final class QueryBudget implements AutoCloseable {
     private long scannedRows;
     private long workingRows;
     private long workingBytes;
+    private int internalDepth;
 
     private QueryBudget(QueryLimits limits, LongSupplier clock) {
         if (CURRENT.get() != null) { throw new IllegalStateException("A query budget is already active"); }
@@ -81,12 +82,20 @@ public final class QueryBudget implements AutoCloseable {
 
     public static long resultRowLimit() {
         QueryBudget budget = CURRENT.get();
-        return budget == null ? Long.MAX_VALUE : budget.limits.maxRows();
+        return budget == null || budget.internalDepth > 0 ? Long.MAX_VALUE : budget.limits.maxRows();
     }
 
     public static long resultByteLimit() {
         QueryBudget budget = CURRENT.get();
-        return budget == null ? Long.MAX_VALUE : budget.limits.maxResultBytes();
+        return budget == null || budget.internalDepth > 0 ? Long.MAX_VALUE : budget.limits.maxResultBytes();
+    }
+
+    /** Inner query rows are working data, never an independently truncated preview. */
+    static <T> T internalResults(java.util.function.Supplier<T> operation) {
+        QueryBudget budget = CURRENT.get();
+        if (budget != null) { budget.internalDepth++; }
+        try { return operation.get(); }
+        finally { if (budget != null) { budget.internalDepth--; } }
     }
 
     /** Deterministic logical payload size, excluding Java object and JSON overhead. */

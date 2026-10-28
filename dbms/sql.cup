@@ -4,6 +4,8 @@ import java_cup.runtime.*;
 parser code {:
     private final List<ParameterTerm> parameters = new ArrayList<>();
     private String sourceSql;
+    private int derivedNumber;
+    public String derivedName() { return "subquery_" + (++derivedNumber); }
 
     public void setSourceSql(String sql) { sourceSql = sql; }
     public String expressionSql(int start, int end) {
@@ -33,6 +35,14 @@ parser code {:
 :};
 
 action code {:
+    private ArrayList<String> names(ArrayList<Column> columns) {
+        ArrayList<String> names = new ArrayList<>();
+        for(Column column : columns) {
+            if(column.getTable()!=null) throw new IllegalArgumentException("Key columns cannot be qualified");
+            names.add(column.getName());
+        }
+        return names;
+    }
     private Long limitInteger(java.math.BigInteger value) {
         try { return value.longValueExact(); }
         catch (ArithmeticException e) { throw new InvalidSyntaxException("LIMIT integer is out of range"); }
@@ -58,6 +68,13 @@ action code {:
 terminal SELECT, FROM, WHERE, DISTINCT, ALL, AS, LIMIT, OFFSET;
 terminal CREATE, DROP, TABLE, IF, EXISTS, PRIMARY, KEY, NOT, NULL;
 terminal DEFAULT, UNIQUE, CHECK, REFERENCES, FOREIGN;
+terminal ALTER, ADD, COLUMN, RENAME, TO;
+terminal INDEX, EXPLAIN, QUERY, PLAN;
+terminal WITH, UNION, INTERSECT, EXCEPT;
+terminal CASE, WHEN, THEN, ELSE, CAST, CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP;
+terminal CONFLICT, DO, NOTHING, RETURNING;
+terminal CASCADE, RESTRICT, NO, ACTION, DEFERRABLE, INITIALLY, DEFERRED, IMMEDIATE;
+terminal SAVEPOINT, RELEASE;
 terminal REAL, CHAR, VARCHAR, TEXT;
 terminal String INTEGER;
 terminal INSERT, INTO, VALUES, UPDATE, SET, DELETE;
@@ -75,20 +92,30 @@ terminal Integer PARAMETER;
 non terminal SQLStatement statement, command;
 non terminal CreateStatement create_statement;
 non terminal DropStatement drop_statement;
-non terminal SelectStatement select_statement;
-non terminal InsertStatement insert_statement;
+non terminal SelectStatement select_core;
+non terminal QueryStatement query, compound_query;
+non terminal ArrayList<CteDefinition> optional_with, cte_list;
+non terminal CteDefinition cte;
+non terminal InsertStatement insert_statement, insert_body;
+non terminal Upsert upsert_clause;
+non terminal ArrayList<Column> conflict_target;
+non terminal ArrayList<Object> returning_clause;
 non terminal UpdateStatement update_statement;
 non terminal DeleteStatement delete_statement;
 non terminal Table table, table_reference;
 non terminal String alias, optional_alias, optional_outer;
-non terminal Boolean distinct, direction, if_exists, if_not_exists;
-non terminal Object optional_work;
+non terminal Boolean distinct, direction, if_exists, if_not_exists, index_unique;
+non terminal Object optional_work, optional_column, optional_savepoint;
 non terminal ArrayList<Column> column_list, insert_columns, assignments;
 non terminal SchemaDefinition definitions, column_definition;
 non terminal Column column, assignment;
 non terminal ColumnOptions column_options;
 non terminal Object default_value;
-non terminal String parent_column;
+non terminal ArrayList<String> parent_columns;
+non terminal ForeignKey reference_clause;
+non terminal ReferenceOptions reference_actions;
+non terminal String reference_action;
+non terminal Boolean reference_deferred, initially_deferred;
 non terminal ArrayList<Object> select_list;
 non terminal SelectItem select_item;
 non terminal FromClause from_clause, from_list;
@@ -98,6 +125,9 @@ non terminal OrderBy ordering;
 non terminal ConditionalExpression where_clause, having_clause, condition;
 non terminal CompareTerm expression, disjunction, conjunction, factor, comparison;
 non terminal CompareTerm additive, multiplicative, concatenation, unary, scalar;
+non terminal CompareTerm case_base, case_else;
+non terminal ArrayList<CompareTerm> case_branches;
+non terminal String cast_type;
 non terminal Limit limit_clause;
 non terminal Long signed_integer;
 non terminal CompareTerm limit_value;
@@ -108,16 +138,34 @@ start with statement;
 statement ::= command:c SEMICOLON {: RESULT = c; :};
 
 command ::= create_statement:c {: RESULT = c; :}
+          | CREATE index_unique:u INDEX if_not_exists:o ID:n ON table:t LPAREN ID:c RPAREN
+            {: RESULT = new IndexStatement(n, t, c, u, o); :}
+          | DROP INDEX if_exists:o ID:n {: RESULT = new IndexStatement(n, null, null, false, o); :}
+          | EXPLAIN QUERY PLAN query:s {: RESULT = new ExplainStatement(s); :}
+          | ALTER TABLE table:t ADD optional_column column_definition:d
+            {: RESULT = new AlterStatement(t, null, null, d); :}
+          | ALTER TABLE table:t RENAME TO ID:n {: RESULT = new AlterStatement(t, null, n, null); :}
+          | ALTER TABLE table:t RENAME optional_column ID:c TO ID:n
+            {: RESULT = new AlterStatement(t, c, n, null); :}
           | drop_statement:c {: RESULT = c; :}
-          | select_statement:c {: RESULT = c; :}
+          | query:c {: RESULT = c; :}
+          | WITH cte_list:d insert_statement:i {: RESULT = new WithStatement(d, i); :}
+          | WITH cte_list:d update_statement:i {: RESULT = new WithStatement(d, i); :}
+          | WITH cte_list:d delete_statement:i {: RESULT = new WithStatement(d, i); :}
           | insert_statement:c {: RESULT = c; :}
           | update_statement:c {: RESULT = c; :}
           | delete_statement:c {: RESULT = c; :}
           | BEGIN optional_work {: RESULT = new BeginStatement(); :}
           | COMMIT optional_work {: RESULT = new CommitStatement(); :}
           | END optional_work {: RESULT = new CommitStatement(); :}
-          | ROLLBACK optional_work {: RESULT = new RollbackStatement(); :};
+          | ROLLBACK optional_work {: RESULT = new RollbackStatement(); :}
+          | SAVEPOINT ID:n {: RESULT = new SavepointStatement("SAVEPOINT", n); :}
+          | RELEASE optional_savepoint ID:n {: RESULT = new SavepointStatement("RELEASE", n); :}
+          | ROLLBACK optional_work TO optional_savepoint ID:n {: RESULT = new SavepointStatement("ROLLBACK", n); :};
 optional_work ::= WORK | TRANSACTION | ;
+optional_column ::= COLUMN | ;
+optional_savepoint ::= SAVEPOINT | ;
+index_unique ::= UNIQUE {: RESULT = true; :} | {: RESULT = false; :};
 
 table ::= ID:n {: RESULT = new Table(n); :};
 column ::= ID:n {: RESULT = new Column(n); :}
@@ -128,14 +176,14 @@ create_statement ::= CREATE TABLE if_not_exists:i table:t LPAREN definitions:c R
 if_not_exists ::= IF NOT EXISTS {: RESULT = true; :} | {: RESULT = false; :};
 definitions ::= column_definition:c {: RESULT = c; :}
     | definitions:d COMMA column_definition:c {: RESULT = d.append(c); :}
-    | definitions:d COMMA PRIMARY KEY LPAREN ID:n RPAREN
-      {: d.finishColumns(); d.primaryKey(n); RESULT = d; :}
-    | definitions:d COMMA UNIQUE LPAREN ID:n RPAREN
-      {: d.finishColumns(); d.column(n).setUnique(true); RESULT = d; :}
+    | definitions:d COMMA PRIMARY KEY LPAREN column_list:c RPAREN
+      {: d.finishColumns(); d.primaryKey(names(c)); RESULT = d; :}
+    | definitions:d COMMA UNIQUE LPAREN column_list:c RPAREN
+      {: d.finishColumns(); d.uniqueKey(names(c)); RESULT = d; :}
     | definitions:d COMMA CHECK LPAREN expression:e RPAREN
       {: d.finishColumns(); d.checks.add(parser.expressionSql(eleft, eright)); RESULT = d; :}
-    | definitions:d COMMA FOREIGN KEY LPAREN ID:c RPAREN REFERENCES ID:t parent_column:p
-      {: d.finishColumns(); d.foreignKeys.add(new ForeignKey(c, t, p)); RESULT = d; :};
+    | definitions:d COMMA FOREIGN KEY LPAREN column_list:c RPAREN reference_clause:f reference_deferred:b
+      {: d.finishColumns(); d.foreignKeys.add(f.withColumns(names(c)).withDeferred(b)); RESULT = d; :};
 column_definition ::= column:c INTEGER:t column_options:o
     {: c.setDeclaredInteger(t.equals("INTEGER")); RESULT = define(c, Column.INTEGER, null, o); :}
     | column:c REAL column_options:o {: RESULT = define(c, Column.REAL, null, o); :}
@@ -150,9 +198,22 @@ column_options ::= column_options:o PRIMARY KEY {: RESULT = o.primaryKey(); :}
     | column_options:o DEFAULT default_value:v {: RESULT = o.defaultValue(v); :}
     | column_options:o CHECK LPAREN expression:e RPAREN
       {: RESULT = o.check(parser.expressionSql(eleft, eright)); :}
-    | column_options:o REFERENCES ID:t parent_column:p {: RESULT = o.references(t, p); :}
+    | column_options:o reference_clause:f {: RESULT = o.references(f); :}
+    | column_options:o DEFERRABLE initially_deferred:b {: RESULT = o.deferred(b); :}
+    | column_options:o NOT DEFERRABLE initially_deferred:b {: RESULT = o.deferred(false); :}
     | {: RESULT = new ColumnOptions(false, false); :};
-parent_column ::= LPAREN ID:n RPAREN {: RESULT = n; :} | {: RESULT = null; :};
+parent_columns ::= LPAREN column_list:c RPAREN {: RESULT = names(c); :} | {: RESULT = new ArrayList<String>(); :};
+reference_clause ::= REFERENCES ID:t parent_columns:p reference_actions:o {: RESULT = ForeignKey.reference(t, p, o); :};
+reference_actions ::= reference_actions:o ON DELETE reference_action:a {: o.onDelete = a; RESULT = o; :}
+    | reference_actions:o ON UPDATE reference_action:a {: o.onUpdate = a; RESULT = o; :}
+    | {: RESULT = new ReferenceOptions(); :};
+reference_action ::= CASCADE {: RESULT = "CASCADE"; :} | RESTRICT {: RESULT = "RESTRICT"; :}
+    | NO ACTION {: RESULT = "NO ACTION"; :} | SET NULL {: RESULT = "SET NULL"; :}
+    | SET DEFAULT {: RESULT = "SET DEFAULT"; :};
+reference_deferred ::= DEFERRABLE initially_deferred:b {: RESULT = b; :}
+    | NOT DEFERRABLE initially_deferred:b {: RESULT = false; :} | {: RESULT = false; :};
+initially_deferred ::= INITIALLY DEFERRED {: RESULT = true; :} | INITIALLY IMMEDIATE {: RESULT = false; :}
+    | {: RESULT = false; :};
 default_value ::= STRING:s {: RESULT = s; :} | NULL {: RESULT = null; :}
     | INT_VAL:n {: RESULT = new IntegerLiteral(n).getValue(); :}
     | REAL_VAL:n {: RESULT = n; :}
@@ -164,9 +225,22 @@ drop_statement ::= DROP TABLE if_exists:i table:t
     {: RESULT = new DropStatement(t); RESULT.setIfExists(i); :};
 if_exists ::= IF EXISTS {: RESULT = true; :} | {: RESULT = false; :};
 
-select_statement ::= SELECT distinct:d select_list:s from_clause:f where_clause:w
-    group_clause:g having_clause:h order_clause:o limit_clause:l
-    {: RESULT = new SelectStatement(s, f, w, g, h, o, l, d); :};
+query ::= optional_with:w compound_query:q order_clause:o limit_clause:l
+    {: q.tail(o, l); RESULT = w.isEmpty() ? q : new WithQuery(w, q); :};
+optional_with ::= WITH cte_list:c {: RESULT = c; :} | {: RESULT = new ArrayList<CteDefinition>(); :};
+cte_list ::= cte:c {: RESULT = new ArrayList<CteDefinition>(); RESULT.add(c); :}
+    | cte_list:l COMMA cte:c {: l.add(c); RESULT = l; :};
+cte ::= ID:n insert_columns:c AS LPAREN query:q RPAREN
+    {: ArrayList<String> names = new ArrayList<String>();
+       for (Column col : c) { if (col.getTable() != null) throw new IllegalArgumentException("CTE columns cannot be qualified"); names.add(col.getName()); }
+       RESULT = new CteDefinition(n, names, q); :};
+compound_query ::= select_core:s {: RESULT = s; :}
+    | compound_query:l UNION select_core:r {: RESULT = new CompoundQuery(l, "UNION", r); :}
+    | compound_query:l UNION ALL select_core:r {: RESULT = new CompoundQuery(l, "UNION ALL", r); :}
+    | compound_query:l INTERSECT select_core:r {: RESULT = new CompoundQuery(l, "INTERSECT", r); :}
+    | compound_query:l EXCEPT select_core:r {: RESULT = new CompoundQuery(l, "EXCEPT", r); :};
+select_core ::= SELECT distinct:d select_list:s from_clause:f where_clause:w group_clause:g having_clause:h
+    {: RESULT = new SelectStatement(s, f, w, g, h, new ArrayList<OrderBy>(), null, d); :};
 distinct ::= DISTINCT {: RESULT = true; :} | ALL {: RESULT = false; :} | {: RESULT = false; :};
 select_list ::= select_item:i {: RESULT = new ArrayList<Object>(); RESULT.add(i); :}
     | select_list:l COMMA select_item:i {: l.add(i); RESULT = l; :};
@@ -175,7 +249,9 @@ select_item ::= expression:e optional_alias:a {: RESULT = new SelectItem(e, a); 
     | ID:t DOT STAR {: RESULT = SelectItem.star(t); :};
 optional_alias ::= AS ID:a {: RESULT = a; :} | ID:a {: RESULT = a; :} | {: RESULT = null; :};
 alias ::= AS ID:a {: RESULT = a; :} | ID:a {: RESULT = a; :} | {: RESULT = null; :};
-table_reference ::= table:t alias:a {: t.setRangeVariable(a); RESULT = t; :};
+table_reference ::= table:t alias:a {: t.setRangeVariable(a); RESULT = t; :}
+    | LPAREN query:q RPAREN alias:a
+      {: RESULT = new QueryTable(q, List.of(), a == null ? parser.derivedName() : a); :};
 from_clause ::= FROM from_list:f {: RESULT = f; :} | {: RESULT = new FromClause(); :};
 from_list ::= table_reference:t {: RESULT = new FromClause().add(t, null, false); :}
     | from_list:f COMMA table_reference:t {: RESULT = f.add(t, null, false); :}
@@ -222,6 +298,8 @@ comparison ::= additive:l EQ additive:r {: RESULT = new Comparison(Comparison.EQ
     | additive:l CLIKE additive:r {: RESULT = new Comparison(Comparison.CLIKE, l, r); :}
     | additive:l NOT LIKE additive:r {: RESULT = new NotExpression(new Comparison(Comparison.LIKE, l, r)); :}
     | additive:e IN LPAREN optional_expressions:v RPAREN {: RESULT = new InExpression(e, v); :}
+    | additive:e IN LPAREN query:q RPAREN {: RESULT = new InQueryExpression(e, q); :}
+    | additive:e NOT IN LPAREN query:q RPAREN {: RESULT = new NotExpression(new InQueryExpression(e, q)); :}
     | additive:e NOT IN LPAREN optional_expressions:v RPAREN {: RESULT = new NotExpression(new InExpression(e, v)); :}
     | additive:e BETWEEN additive:l AND additive:r
       {: RESULT = new AndExpression(new Comparison(Comparison.GTEQ, e, l), new Comparison(Comparison.LTEQ, e, r)); :}
@@ -246,27 +324,52 @@ unary ::= MINUS unary:e {: RESULT = e instanceof IntegerLiteral ? ((IntegerLiter
     | PLUS unary:e {: RESULT = e; :}
     | scalar:e {: RESULT = e; :};
 scalar ::= column:c {: RESULT = c; :}
+    | CAST LPAREN expression:e AS cast_type:t RPAREN {: RESULT = new CastTerm(e, t); :}
+    | CASE case_base:b case_branches:c case_else:e END {: RESULT = new CaseTerm(b, c, e); :}
+    | CURRENT_DATE {: RESULT = Functions.call("DATE", List.of(), false); :}
+    | CURRENT_TIME {: RESULT = Functions.call("TIME", List.of(), false); :}
+    | CURRENT_TIMESTAMP {: RESULT = Functions.call("DATETIME", List.of(), false); :}
+    | LPAREN query:q RPAREN {: RESULT = new SubqueryTerm(q, false); :}
+    | EXISTS LPAREN query:q RPAREN {: RESULT = new SubqueryTerm(q, true); :}
     | PARAMETER:n {: RESULT = parser.parameter(n); :}
     | INT_VAL:n {: RESULT = new IntegerLiteral(n); :}
     | REAL_VAL:n {: RESULT = new CompareTerm(n); :}
     | STRING:s {: RESULT = new CompareTerm(s); :}
     | NULL {: RESULT = new CompareTerm((Object) null); :}
     | LPAREN expression:e RPAREN {: RESULT = e; :}
-    | ID:f LPAREN expression:e RPAREN {: RESULT = new AggregateTerm(f, e, false); :}
-    | ID:f LPAREN DISTINCT expression:e RPAREN {: RESULT = new AggregateTerm(f, e, true); :}
+    | ID:f LPAREN optional_expressions:e RPAREN {: RESULT = Functions.call(f, e, false); :}
+    | ID:f LPAREN DISTINCT expression:e RPAREN {: RESULT = Functions.call(f, List.of(e), true); :}
     | ID:f LPAREN STAR RPAREN {: RESULT = new AggregateTerm(f, null, false); :};
 
-insert_statement ::= INSERT INTO table:t insert_columns:c VALUES value_rows:r
+case_base ::= expression:e {: RESULT = e; :} | {: RESULT = null; :};
+case_branches ::= WHEN expression:w THEN expression:t
+    {: RESULT = new ArrayList<CompareTerm>(); RESULT.add(w); RESULT.add(t); :}
+    | case_branches:l WHEN expression:w THEN expression:t {: l.add(w); l.add(t); RESULT = l; :};
+case_else ::= ELSE expression:e {: RESULT = e; :} | {: RESULT = new CompareTerm((Object)null); :};
+cast_type ::= INTEGER:t {: RESULT = t; :} | REAL {: RESULT = "REAL"; :}
+    | TEXT {: RESULT = "TEXT"; :} | CHAR {: RESULT = "CHAR"; :}
+    | VARCHAR {: RESULT = "VARCHAR"; :} | ID:t {: RESULT = t; :};
+
+insert_statement ::= insert_body:i upsert_clause:u returning_clause:r {: i.configure(u, r); RESULT = i; :};
+insert_body ::= INSERT INTO table:t insert_columns:c VALUES value_rows:r
     {: RESULT = InsertStatement.fromRows(t, c, r); :}
+    | INSERT INTO table:t insert_columns:c query:q {: RESULT = InsertStatement.fromQuery(t, c, q); :}
     | INSERT INTO table:t DEFAULT VALUES {: RESULT = InsertStatement.defaults(t); :};
+conflict_target ::= LPAREN column_list:c RPAREN {: RESULT = c; :} | {: RESULT = new ArrayList<Column>(); :};
+upsert_clause ::= ON CONFLICT conflict_target:c DO NOTHING {: RESULT = new Upsert(c, null, null); :}
+    | ON CONFLICT conflict_target:c DO UPDATE SET assignments:a where_clause:w {: RESULT = new Upsert(c, a, w); :}
+    | {: RESULT = null; :};
+returning_clause ::= RETURNING select_list:s {: RESULT = s; :} | {: RESULT = null; :};
 insert_columns ::= LPAREN column_list:c RPAREN {: RESULT = c; :} | {: RESULT = new ArrayList<Column>(); :};
 column_list ::= column:c {: RESULT = new ArrayList<Column>(); RESULT.add(c); :}
     | column_list:l COMMA column:c {: l.add(c); RESULT = l; :};
 value_rows ::= LPAREN expressions:e RPAREN
     {: RESULT = new ArrayList<ArrayList<Object>>(); RESULT.add(new ArrayList<Object>(e)); :}
     | value_rows:l COMMA LPAREN expressions:e RPAREN {: l.add(new ArrayList<Object>(e)); RESULT = l; :};
-update_statement ::= UPDATE table:t SET assignments:a where_clause:w {: RESULT = new UpdateStatement(t, a, w); :};
+update_statement ::= UPDATE table:t SET assignments:a where_clause:w returning_clause:r
+    {: UpdateStatement statement = new UpdateStatement(t, a, w); statement.setReturning(r); RESULT = statement; :};
 assignments ::= assignment:a {: RESULT = new ArrayList<Column>(); RESULT.add(a); :}
     | assignments:l COMMA assignment:a {: l.add(a); RESULT = l; :};
 assignment ::= column:c EQ expression:e {: c.setUpdateVal(e); RESULT = c; :};
-delete_statement ::= DELETE FROM table:t where_clause:w {: RESULT = new DeleteStatement(t, w); :};
+delete_statement ::= DELETE FROM table:t where_clause:w returning_clause:r
+    {: DeleteStatement statement = new DeleteStatement(t, w); statement.setReturning(r); RESULT = statement; :};

@@ -31,7 +31,8 @@ public abstract class SQLStatement {
 
     public final void execute() {
         result = null;
-        if (this instanceof BeginStatement || this instanceof CommitStatement || this instanceof RollbackStatement) {
+        if (this instanceof BeginStatement || this instanceof CommitStatement || this instanceof RollbackStatement
+                || this instanceof SavepointStatement) {
             executeInternal();
         } else { DBMS.executeStatement(this); }
     }
@@ -53,6 +54,19 @@ public abstract class SQLStatement {
                     source = iterator;
                 }
             }
+            if (match == null) {
+                for (List<TableIterator> scope : QueryContext.outerSources()) {
+                    for (TableIterator iterator : scope) {
+                        Column candidate = iterator.getTable().resolveColumn(reference);
+                        if (candidate != null) {
+                            if (match != null) { throw new IllegalArgumentException("Ambiguous outer column: " + reference); }
+                            match = candidate;
+                            source = iterator;
+                        }
+                    }
+                    if (match != null) { break; }
+                }
+            }
             if (match == null) { throw new IllegalArgumentException("Unknown column: " + reference); }
             reference.useColInfo(match);
             reference.setTableIterator(source);
@@ -60,6 +74,7 @@ public abstract class SQLStatement {
     }
 
     protected void addExpression(CompareTerm expression) { columns.addAll(expression.getColumns()); }
+    protected void clearColumnReferences() { columns.clear(); }
     public QueryResult getResult() { return result; }
     public void addTable(Table table) { tables.add(table); }
     public void addColumn(Column column) { columns.add(column); }

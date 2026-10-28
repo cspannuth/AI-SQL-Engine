@@ -103,9 +103,14 @@ Table metadata includes `rowIdTable` and `rowIdColumn`; these distinguish new ro
 tables from older formats without reading data. Hidden IDs are absent from the
 declared column list and `SELECT *`. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
 Columns also expose `unique`, `hasDefault`, and `defaultValue`; tables expose
-`checks` and `foreignKeys`. These describe persisted constraints without reading
+`checks`, `foreignKeys`, `primaryKeyColumns`, `uniqueKeys`, and `indexes`. These describe persisted constraints without reading
 rows or resolving parent tables. See [CONSTRAINTS.md](CONSTRAINTS.md).
 Nulls remain null rather than becoming the string `"null"` or zero.
+Read queries may use ordinary WITH scopes, subqueries, compounds, functions, and
+EXPLAIN QUERY PLAN. Authorization traverses every nested physical table before
+execution. Intermediate results retain complete rows; caller previews apply to
+the final result. Writes remain denied, including WITH-prefixed DML and RETURNING.
+Deferred-reference validation runs on writes/explicit commits, never on adapter reads.
 
 `complete()` describes the submitted SQL result. For example, a successful
 `SELECT ... LIMIT 10` can be complete for that query while representing only ten

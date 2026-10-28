@@ -15,8 +15,10 @@ public class DropStatement extends SQLStatement {
         }
         table.setName(name);
         table.open();
-        ConstraintValidator.validateDrop(table);
+        MutationBatch batch=MutationBatch.dropping(table);
+        batch.write();
         table.close();
+        for (IndexDefinition index : IndexCatalog.forTable(table.getName())) { IndexCatalog.drop(index); }
         Catalog.removeMetadata(table);
         DBMS.getEnv().removeDatabase(DBMS.getTransaction(), table.dbName());
         result = QueryResult.changed("Dropped table " + table + ".", 0);

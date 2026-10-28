@@ -33,6 +33,17 @@ public class EngineTests {
             DBMS.shutdown();
             DBMS.init(home);
             rows("SELECT id FROM persisted ORDER BY id;", row(1));
+            sql("ALTER TABLE legacy ADD COLUMN extra INTEGER DEFAULT 5;");
+            sql("ALTER TABLE legacy RENAME label TO caption;");
+            sql("ALTER TABLE legacy RENAME TO migrated_legacy;");
+            DBMS.shutdown();
+            DBMS.init(home);
+            rows("SELECT id,caption,extra FROM migrated_legacy ORDER BY id;",row(7,"\u00e9",5),row(8,"caf\u00e9",5));
+            fails("INSERT INTO migrated_legacy(id,caption) VALUES(9,'\u6f22');");
+            Table migrated = new Table("migrated_legacy");
+            Catalog.getMetadata(migrated);
+            equal(migrated.getRowFormat(),0,"ALTER retains original row encoding");
+            fails("ALTER TABLE migrated_legacy ADD bad INTEGER DEFAULT -1 CHECK(bad>0);");
             System.out.println("Engine checks passed: " + assertions);
         } finally { DBMS.shutdown(); }
     }

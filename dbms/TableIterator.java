@@ -13,14 +13,25 @@ public class TableIterator implements AutoCloseable {
     private boolean exhausted;
     private Object[] snapshot;
     private int numTuples;
+    private IndexDefinition index;
+    private Column indexedColumn;
+    private CompareTerm lookupValue;
+    private SecondaryCursor indexCursor;
+    private final DatabaseEntry secondaryKey = new DatabaseEntry();
+    private final List<List<Object>> memory;
+    private int memoryPosition = -1;
+    private boolean closed;
 
     /** Scan all rows for storage-level validation, without a SQL filter. */
     public TableIterator(Table table) { this(null, table, false); }
 
     public TableIterator(SQLStatement statement, Table table, boolean evalWhere) {
         this.table = table;
-        if (table.getDB() == null) { throw new IllegalStateException("Table is not open: " + table); }
-        cursor = table.getDB().openCursor(DBMS.getTransaction(), null);
+        memory = table.memoryRows();
+        if (memory == null) {
+            if (table.getDB() == null) { throw new IllegalStateException("Table is not open: " + table); }
+            cursor = table.getDB().openCursor(DBMS.getTransaction(), null);
+        }
         where = evalWhere ? statement.getWhere() : null;
     }
 
@@ -28,12 +39,22 @@ public class TableIterator implements AutoCloseable {
     public Column getColumn(int index) { return table.getColumn(index); }
     public int numColumns() { return table.numColumns(); }
     public int numTuples() { return numTuples; }
+    void lookup(IndexDefinition index, Column column, CompareTerm value) {
+        this.index = index;
+        indexedColumn = column;
+        lookupValue = value;
+    }
+    String accessDescription() {
+        return index == null ? "SCAN " + table.getReferenceName()
+                : "SEARCH " + table.getReferenceName() + " USING INDEX " + index.name() + " (" + index.column() + "=?)";
+    }
 
     public void rewind() {
         beforeFirst = true;
         exhausted = false;
         positioned = false;
         snapshot = null;
+        memoryPosition = -1;
     }
 
     public boolean first() {
@@ -53,11 +74,25 @@ public class TableIterator implements AutoCloseable {
 
     private boolean advance() {
         QueryBudget.check();
-        if (cursor == null) { throw new IllegalStateException("This iterator is closed"); }
+        if (closed) { throw new IllegalStateException("This iterator is closed"); }
         snapshot = null;
         if (exhausted) { return false; }
-        OperationStatus status = beforeFirst ? cursor.getFirst(key, value, null)
-                : cursor.getNext(key, value, null);
+        OperationStatus status;
+        if (memory != null) {
+            status = ++memoryPosition < memory.size() ? OperationStatus.SUCCESS : OperationStatus.NOTFOUND;
+        } else if (index == null) {
+            status = beforeFirst ? cursor.getFirst(key, value, null) : cursor.getNext(key, value, null);
+        } else {
+            if (indexCursor == null) { indexCursor = table.getIndex(index.name()).openCursor(DBMS.getTransaction(), null); }
+            if (beforeFirst) {
+                Object term = SqlValues.applyAffinity(indexedColumn, lookupValue.getValue());
+                if (term == null) { status = OperationStatus.NOTFOUND; }
+                else {
+                    secondaryKey.setData(IndexCatalog.indexKey(term));
+                    status = indexCursor.getSearchKey(secondaryKey, key, value, null);
+                }
+            } else { status = indexCursor.getNextDup(secondaryKey, key, value, null); }
+        }
         beforeFirst = false;
         positioned = status == OperationStatus.SUCCESS;
         if (positioned) { QueryBudget.scannedRow(); }
@@ -68,6 +103,11 @@ public class TableIterator implements AutoCloseable {
     public Object getColumnVal(int index) {
         if (snapshot != null) { return snapshot[index]; }
         if (!positioned) { throw new IllegalStateException("Iterator is not positioned on a row"); }
+        if (memory != null) { return memory.get(memoryPosition).get(index); }
+        return readColumn(table, key, value, index);
+    }
+
+    static Object readColumn(Table table, DatabaseEntry key, DatabaseEntry value, int index) {
         if (table.usesRowIds() && (index == table.numColumns() || index == table.getRowIdColumn())) {
             return RowIdentity.value(key);
         }
@@ -123,6 +163,8 @@ public class TableIterator implements AutoCloseable {
     public void useSnapshot(Object[] row) { snapshot = row; }
 
     public void close() {
+        closed = true;
+        if (indexCursor != null) { indexCursor.close(); indexCursor = null; }
         if (cursor != null) {
             cursor.close();
             cursor = null;

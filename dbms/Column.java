@@ -44,6 +44,8 @@ public class Column extends CompareTerm {
     private int index;           // the index of the column in its table
     private TableIterator tableIter;
     private CompareTerm expression;
+    private SqlType queryType;
+    private SqlType affinity;
     
     /**
      * Constructs a Column object with the specified name.
@@ -88,6 +90,8 @@ public class Column extends CompareTerm {
         this.index = col.index;
         this.updateVal = col.updateVal; 
         this.tableIter = col.tableIter;
+        this.queryType = col.queryType;
+        this.affinity = col.affinity;
     }
     
     /**
@@ -227,6 +231,7 @@ public class Column extends CompareTerm {
 
     public SqlType getResultType() {
         if (expression != null) { return expression.getResultType(); }
+        if (queryType != null) { return queryType; }
         return type == INTEGER ? SqlType.INTEGER : type == REAL ? SqlType.REAL : SqlType.TEXT;
     }
     
@@ -404,6 +409,16 @@ public class Column extends CompareTerm {
         this.hasDefault = other.hasDefault;
         this.defaultValue = other.defaultValue;
         this.index = other.index;
+        queryType = other.queryType;
+        affinity = other.affinity;
+    }
+
+    void setQueryType(SqlType type, SqlType affinity) { queryType = type; this.affinity = affinity; }
+    public SqlType getAffinity() {
+        return expression != null ? expression.getAffinity() : affinity != null ? affinity : getResultType();
+    }
+    public java.util.List<QueryStatement> getSubqueries() {
+        return expression == null ? java.util.List.of() : expression.getSubqueries();
     }
 
     /** SQLite aliases only the exact INTEGER type name to the physical row ID. */

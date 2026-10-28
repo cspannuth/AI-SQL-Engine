@@ -44,23 +44,18 @@ public final class SqlValues {
         boolean rightNumeric = numericColumn(right);
         if (leftNumeric && !rightNumeric) { b = numericText(b); }
         else if (rightNumeric && !leftNumeric) { a = numericText(a); }
-        else if (textColumn(left) && !(right instanceof Column) && b != null) { b = b.toString(); }
-        else if (textColumn(right) && !(left instanceof Column) && a != null) { a = a.toString(); }
+        else if (textColumn(left) && right.getAffinity() == SqlType.UNKNOWN && b != null) { b = b.toString(); }
+        else if (textColumn(right) && left.getAffinity() == SqlType.UNKNOWN && a != null) { a = a.toString(); }
         return new Object[]{a, b};
     }
 
     private static boolean numericColumn(CompareTerm term) {
-        if (term instanceof Column && ((Column) term).getExpression() != null) {
-            return numericColumn(((Column) term).getExpression());
-        }
-        return term instanceof Column && ((Column) term).getType() <= Column.REAL;
+        return term.getAffinity() == SqlType.INTEGER || term.getAffinity() == SqlType.REAL
+                || term.getAffinity() == SqlType.NUMERIC;
     }
 
     private static boolean textColumn(CompareTerm term) {
-        if (term instanceof Column && ((Column) term).getExpression() != null) {
-            return textColumn(((Column) term).getExpression());
-        }
-        return term instanceof Column && ((Column) term).getType() >= Column.CHAR;
+        return term.getAffinity() == SqlType.TEXT;
     }
 
     private static Object numericText(Object value) {

@@ -32,6 +32,7 @@ public class AggregateTerm extends CompareTerm {
     public void useState(State state) { value = state.finish(); }
     public List<Column> getColumns() { return argument == null ? List.of() : argument.getColumns(); }
     public List<AggregateTerm> getAggregates() { return List.of(this); }
+    public List<QueryStatement> getSubqueries() { return CompareTerm.queries(argument); }
     public String toString() {
         return function + "(" + (distinct ? "DISTINCT " : "") + (argument == null ? "*" : argument) + ")";
     }

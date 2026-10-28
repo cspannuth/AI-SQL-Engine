@@ -18,11 +18,12 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 ### Implemented core
 
 - CREATE/DROP TABLE with atomic catalog updates and IF [NOT] EXISTS.
-- Literal column defaults and INSERT DEFAULT VALUES; single-column UNIQUE,
-  CHECK, and immediate foreign-key constraints, including parent deletion/key
-  protection. Metadata persists in catalog version 3 while earlier formats remain
+- Literal defaults and INSERT DEFAULT VALUES; single/composite UNIQUE and primary
+  keys, CHECK, immediate/deferred foreign keys, and referential actions. New
+  metadata persists in catalog version 5 while earlier row formats remain
   writable. See [CONSTRAINTS.md](CONSTRAINTS.md) for supported forms and limits.
 - INSERT with column lists and multiple VALUES rows.
+- INSERT SELECT, one-clause UPSERT, RETURNING, WITH-prefixed writes, and savepoints.
 - UPDATE and DELETE with filters, constraints, and affected-row counts.
 - Explicit BEGIN/COMMIT/ROLLBACK and automatic statement transactions.
 - Named projections, wildcards, aliases, literals, and SELECT without FROM.
@@ -31,6 +32,9 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 - COUNT, SUM, AVG, TOTAL, MIN, MAX, and DISTINCT aggregate arguments.
 - Arithmetic, concatenation, comparisons, scalar boolean expressions, IN,
   BETWEEN, LIKE, and SQL three-valued null logic.
+- ALTER additions/renames; persistent single-column indexes and equality plans;
+  subqueries, derived tables, ordinary CTEs and compounds; CASE, CAST, and scalar
+  null/text/numeric/UTC date functions.
 - Case-insensitive identifiers, underscores, quoted identifiers, escaped strings,
   SQL comments, and multiline CLI statements.
 - Typed result values and exceptions independently of CLI printing.
@@ -48,25 +52,25 @@ alongside each engine improvement.
 
 ### Remaining engine work before claiming SQLite compatibility
 
-1. **Schema and type semantics.** Row identity, literal defaults, UNIQUE, CHECK,
-   and immediate single-column foreign keys are implemented for new tables.
-   Next add ALTER TABLE, then indexes and access paths; continue with type affinity,
-   composite constraints, expression defaults, and foreign-key actions/deferral.
-   Introduce explicit format migrations where required, including opt-in conversion of old
-   tables to row IDs; preserve existing database files.
-2. **Query composition.** Add subqueries, correlated subqueries, EXISTS, compound
-   SELECT operations, CTEs, INSERT ... SELECT, and broader join syntax.
-3. **Expressions and functions.** Add CASE, CAST, common scalar/string/date
-   functions, collations, and the remaining SQLite operators. Positional value
-   binding, including LIMIT/OFFSET, is implemented; named parameters remain work.
-4. **Mutation compatibility.** Match SQLite conflict handling and primary-key
-   update behavior; add supported ON CONFLICT and RETURNING forms. Define failed
-   statement behavior for storage errors and add savepoints.
-5. **Planning and resource use.** Add indexes and index-aware access paths,
-   explainable query plans, execution budgets, and streaming where possible.
-   Adapter reads now have scan/work budgets and cooperative deadlines. Simple
-   unordered previews stop early; sorts, groups, DISTINCT, and mutations still
-   materialize data in memory. Hard isolation and broader streaming remain work.
+The six requested stages now have implementations and cumulative test gates:
+ALTER additions/renames; persistent equality indexes and EXPLAIN; subqueries,
+ordinary CTEs and compounds; CASE/CAST and scalar functions; query inserts,
+UPSERT and RETURNING; composite keys, referential actions/deferral, and savepoints.
+See [IMPLEMENTATION_STAGES.md](IMPLEMENTATION_STAGES.md) for achievements and
+[SQL_FEATURES.md](SQL_FEATURES.md) for examples and boundaries.
+
+1. **Schema/type parity.** Complete SQLite affinity/formatting, expression/time
+   defaults, named constraints, DROP COLUMN, arbitrary schema changes, and optional
+   row-format migration. Preserve existing files and test every format transition.
+2. **Query breadth.** Recursive CTEs, window functions, broader join syntax, views,
+   triggers, named parameters, additional functions/operators, and collations.
+3. **Write parity.** Multiple conflict clauses, OR REPLACE/IGNORE, broader RETURNING,
+   and SQLite's exact immediate uniqueness/self-referential mutation ordering.
+4. **Planning.** Range/order/composite/partial/expression indexes, automatic
+   constraint indexes, cost-based plans, and better join access paths.
+5. **Resource use.** Streaming, hard execution isolation, and more scalable
+   savepoints. Current savepoints snapshot engine-owned data in memory; nested
+   queries, sorting, grouping, and mutations also materialize working data.
 6. **Reliability.** Extend property-based/differential coverage, fault injection,
    large-dataset checks, and recovery tests. Define session/concurrency guarantees
    before exposing multiple connections; the current engine owns one serialized
