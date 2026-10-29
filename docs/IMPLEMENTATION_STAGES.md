@@ -124,3 +124,8 @@ python tests/run_tests.py
 The final suite includes all gates, the older engine/adapter/client tests, 873
 SQLite statement comparisons, restart/rollback tests, and forced recovery. Tests
 hash existing `dbms/db` files to verify they are not changed.
+
+The later reliability step adds 1,248 generated SQLite comparisons, six recovery
+scenarios with 151 reference statements, and a 4,096-row fixture with 31 assertions.
+These run in the default suite alongside the original 873 comparisons. See
+[VALIDATION.md](VALIDATION.md) for coverage and reproduction instructions.

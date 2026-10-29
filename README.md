@@ -70,6 +70,10 @@ python scripts/build.py --regenerate
 ```
 
 Tests use temporary databases and compare supported behavior with SQLite.
+The suite includes seeded SQL combinations, six additional crash-recovery
+scenarios, and a 4,096-row fixture for index accuracy and adapter limits. Run
+`python tests/reliability_checks.py` for these checks alone; see the
+[validation guide](docs/VALIDATION.md) for seeds, reproduction, and coverage limits.
 Edit `dbms/sql.cup` and `dbms/sql.flex` to change grammar or tokens, then regenerate
 the checked-in Java parser and lexer. CUP's generated parser emits an unchecked
 operations note during compilation.

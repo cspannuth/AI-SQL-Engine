@@ -71,10 +71,13 @@ See [IMPLEMENTATION_STAGES.md](IMPLEMENTATION_STAGES.md) for achievements and
 5. **Resource use.** Streaming, hard execution isolation, and more scalable
    savepoints. Current savepoints snapshot engine-owned data in memory; nested
    queries, sorting, grouping, and mutations also materialize working data.
-6. **Reliability.** Extend property-based/differential coverage, fault injection,
-   large-dataset checks, and recovery tests. Define session/concurrency guarantees
-   before exposing multiple connections; the current engine owns one serialized
-   session. Verify dependency licensing before distributing the bundled engine.
+6. **Reliability.** Seeded differential coverage, six additional recovery
+   scenarios, and a 4,096-row correctness/resource fixture are now in the default
+   suite; see [VALIDATION.md](VALIDATION.md). Extend these with larger workloads,
+   mid-write fault injection, and additional generated cases. Define session and
+   concurrency guarantees before exposing multiple connections; the current engine
+   owns one serialized session. Verify dependency licensing before distributing
+   the bundled engine.
 
 Completion gate: the advertised dialect works end to end, remaining intentional
 differences are documented, regression and SQLite comparison suites pass, and

@@ -50,6 +50,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `scripts/build.py`: local build and parser regeneration using bundled JARs.
 - `tests/run_tests.py`: isolated engine regressions, SQLite comparison tests, and
   process termination/recovery checks. Uses Python's standard library.
+- `tests/reliability_checks.py`, `tests/ScaleTests.java`: seeded SQL comparisons,
+  acknowledged-boundary crash scenarios, and moderate-size resource/index checks.
+  See [docs/VALIDATION.md](docs/VALIDATION.md) for reproduction and limits.
 
 CRUD and explicit transactions are implemented, including atomic catalog changes.
 SELECT supports projections, aliases, DISTINCT, joins, grouping, common aggregates,
@@ -98,6 +101,7 @@ Build and verify from the repository root:
 python scripts/build.py
 python tests/run_tests.py
 python tests/stage_checks.py --through savepoints
+python tests/reliability_checks.py --seed 42
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`

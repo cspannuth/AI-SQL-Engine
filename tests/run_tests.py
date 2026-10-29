@@ -17,6 +17,7 @@ from client_checks import check_client
 from rowid_checks import check_rowids
 from constraint_checks import check_constraints
 from stage_checks import check_stages
+from reliability_checks import check_reliability
 
 
 def database_hashes():
@@ -255,6 +256,7 @@ def main():
             check_constraints(classpath, workspace / "constraints", run_engine)
             check_stages(classpath,workspace / "stages",run_engine)
             crash_recovery(classpath, workspace / "recovery")
+            check_reliability(classpath, workspace / "reliability", run_engine)
             cli_checks(classpath, workspace / "cli")
     finally:
         if database_hashes() != before:

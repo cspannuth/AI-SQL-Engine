@@ -109,6 +109,12 @@ after verification.
 These checks establish the tested cases, not general proof of SQLite parity,
 arbitrary crash safety, or concurrent isolation.
 
+The default suite also includes seeded differential tests, six additional
+process-termination scenarios, and a 4,096-row index/aggregate/resource fixture.
+See [VALIDATION.md](VALIDATION.md) for standalone commands, failure reproduction,
+and the boundaries of these checks. This expands validation without broadening
+the advertised SQL dialect.
+
 SQLite references: [SELECT](https://www.sqlite.org/lang_select.html),
 [expressions](https://www.sqlite.org/lang_expr.html), and
 [transactions](https://www.sqlite.org/lang_transaction.html).
