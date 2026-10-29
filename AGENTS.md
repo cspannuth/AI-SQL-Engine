@@ -38,6 +38,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
   proposed-state validation, compiled CHECK expressions, and reference metadata.
 - `dbms/IndexCatalog.java`, `QueryPlan.java`: transactional secondary indexes and
   equality access paths; `ExplainStatement.java` exposes plans.
+- `dbms/KeyLookup.java`: shared physical/composite equality probes. Writable startup
+  backfills missing constraint indexes; adapter opens and reads never backfill.
+  Inner joins use early filters and heuristic ordering. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 - `dbms/QueryStatement.java`, `QueryContext.java`, `QueryTable.java`: nested query
   ASTs, lexical scopes, and derived/CTE data. Authorize all nested physical tables.
 - `dbms/CompositeTerm.java`, `Functions.java`, `DateFunctions.java`: scalar
@@ -57,6 +60,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `tests/reliability_checks.py`, `tests/ScaleTests.java`: seeded SQL comparisons,
   acknowledged-boundary crash scenarios, and moderate-size resource/index checks.
   See [docs/VALIDATION.md](docs/VALIDATION.md) for reproduction and limits.
+- `tests/performance_checks.py`, `tests/PerformanceTests.java`,
+  `tests/IndexMigrationTests.java`: deterministic join scan gates, indexed constraint
+  probes, and byte-preserving backfills with adapter/legacy/restart coverage.
 - `tests/schema_checks.py`: cumulative defaults/names/DROP gates, older-format
   fixtures, and forced termination around committed/pending schema rewrites.
 - `sql_agent/`: Python process client, context selection, hosted/local model
@@ -120,6 +126,7 @@ python tests/stage_checks.py --through savepoints
 python tests/reliability_checks.py --seed 42
 python tests/schema_checks.py --through drop
 python tests/agent_checks.py
+python tests/performance_checks.py
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`

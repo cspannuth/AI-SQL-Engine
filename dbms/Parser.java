@@ -3026,7 +3026,7 @@ class CUP$Parser$actions {
 		int tleft = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).left;
 		int tright = ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right;
 		Table t = (Table)((java_cup.runtime.Symbol) CUP$Parser$stack.peek()).value;
-		 RESULT = f.add(t, null, false);
+		 RESULT = f.crossJoin(t);
               CUP$Parser$result = new java_cup.runtime.Symbol(48/*from_list*/, ((java_cup.runtime.Symbol)CUP$Parser$stack.elementAt(CUP$Parser$top-3)).left, ((java_cup.runtime.Symbol)CUP$Parser$stack.peek()).right, RESULT);
             }
           return CUP$Parser$result;

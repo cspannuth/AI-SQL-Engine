@@ -20,6 +20,7 @@ from stage_checks import check_stages
 from reliability_checks import check_reliability
 from schema_checks import check_schema
 from agent_checks import check_agent
+from performance_checks import check_performance
 
 
 def database_hashes():
@@ -252,6 +253,7 @@ def main():
                            cwd=ROOT, check=True, timeout=60)
             for entry in ["IndexTests","QueryTests","IntegrityTests"]:
                 subprocess.run(["java","-cp",classpath,entry,str(workspace / entry)],cwd=ROOT,check=True,timeout=90)
+            check_performance(classpath, workspace / "performance")
             check_client(classpath, workspace / "client", workspace, run_engine)
             compare_sqlite(classpath, workspace / "comparison")
             check_rowids(classpath, workspace / "rowids", run_engine)

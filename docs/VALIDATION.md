@@ -107,3 +107,16 @@ The subsequent schema gates add expression/time defaults, named constraints, and
 DROP COLUMN, including two more schema-rewrite crash scenarios. They also run
 in the complete suite; see [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md) for commands,
 older-format coverage, and remaining restrictions.
+
+The indexing/performance gates also run in the complete suite, or independently:
+
+```text
+python tests/performance_checks.py
+```
+
+They reproduce the movie/person/director join, verify identical result rows with
+at most 242 scanned rows on the 80-row-per-table fixture, and repeat in a new JVM.
+Additional gates check composite/physical access, filter and join semantics,
+indexed constraint probes, unique key swaps, rollback/savepoints, old metadata,
+and raw row hashes across automatic backfills. Recovery checks verify both
+user-created and automatic constraint indexes. See [PERFORMANCE.md](PERFORMANCE.md).

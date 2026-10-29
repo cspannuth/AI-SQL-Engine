@@ -73,5 +73,7 @@ public class CreateStatement extends SQLStatement {
                 DBMS.getTransaction(), table.dbName(), config)) {
             result = QueryResult.changed("Created table " + table + ".", 0);
         }
+        table.open();
+        IndexCatalog.ensureConstraints(table);
     }
 }

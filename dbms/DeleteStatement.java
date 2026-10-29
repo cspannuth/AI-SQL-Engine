@@ -20,6 +20,7 @@ public class DeleteStatement extends SQLStatement {
         try (TableIterator iterator = new TableIterator(this, table, true);
              QueryContext.Scope scope=QueryContext.sources(List.of(iterator))) {
             bindColumns(List.of(iterator));
+            QueryPlan.choose(iterator, getWhere(), 0, List.of(iterator));
             if(getWhere()!=null) { for(QueryStatement query:getWhere().getSubqueries()) { query.describeChecked(); } }
             while (iterator.next()) {
                 byte[] key = iterator.getKey();

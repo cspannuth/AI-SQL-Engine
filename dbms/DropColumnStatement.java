@@ -46,7 +46,7 @@ public final class DropColumnStatement extends SQLStatement {
                 keys.add(ByteBuffer.wrap(key));
             }
         }
-        ConstraintValidator.validateChange(edited, records, keys);
+        ConstraintValidator.validateRewrite(edited, records, keys);
         rewrite(original, edited, metadata, records, indexes);
         result = QueryResult.changed("Dropped column " + columnName + ".", 0);
     }
@@ -63,7 +63,7 @@ public final class DropColumnStatement extends SQLStatement {
         if (column.isPrimaryKey() || column.isUnique() || table.getUniqueKeys().stream().anyMatch(this::contains)) {
             throw new IllegalArgumentException("Column belongs to a PRIMARY KEY or UNIQUE constraint: " + columnName);
         }
-        if (indexes.stream().anyMatch(index -> matches(index.column()))) {
+        if (indexes.stream().anyMatch(index -> contains(index.columns()))) {
             throw new IllegalArgumentException("Column is indexed: " + columnName);
         }
     }

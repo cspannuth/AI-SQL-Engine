@@ -13,9 +13,8 @@ public class TableIterator implements AutoCloseable {
     private boolean exhausted;
     private Object[] snapshot;
     private int numTuples;
-    private IndexDefinition index;
-    private Column indexedColumn;
-    private CompareTerm lookupValue;
+    private KeyLookup.Path access;
+    private List<CompareTerm> lookupValues;
     private SecondaryCursor indexCursor;
     private final DatabaseEntry secondaryKey = new DatabaseEntry();
     private final List<List<Object>> memory;
@@ -39,14 +38,15 @@ public class TableIterator implements AutoCloseable {
     public Column getColumn(int index) { return table.getColumn(index); }
     public int numColumns() { return table.numColumns(); }
     public int numTuples() { return numTuples; }
-    void lookup(IndexDefinition index, Column column, CompareTerm value) {
-        this.index = index;
-        indexedColumn = column;
-        lookupValue = value;
+    void lookup(KeyLookup.Path access, List<CompareTerm> values) {
+        this.access = access;
+        lookupValues = List.copyOf(values);
     }
     String accessDescription() {
-        return index == null ? "SCAN " + table.getReferenceName()
-                : "SEARCH " + table.getReferenceName() + " USING INDEX " + index.name() + " (" + index.column() + "=?)";
+        if (access == null) { return "SCAN " + table.getReferenceName(); }
+        if (access.physical()) { return "SEARCH " + table.getReferenceName() + " USING PRIMARY KEY"; }
+        return "SEARCH " + table.getReferenceName() + " USING INDEX " + access.index().name()
+                + " (" + String.join("=? AND ", access.index().columns()) + "=?)";
     }
 
     public void rewind() {
@@ -80,18 +80,31 @@ public class TableIterator implements AutoCloseable {
         OperationStatus status;
         if (memory != null) {
             status = ++memoryPosition < memory.size() ? OperationStatus.SUCCESS : OperationStatus.NOTFOUND;
-        } else if (index == null) {
+        } else if (access == null) {
             status = beforeFirst ? cursor.getFirst(key, value, null) : cursor.getNext(key, value, null);
         } else {
-            if (indexCursor == null) { indexCursor = table.getIndex(index.name()).openCursor(DBMS.getTransaction(), null); }
+            if (!access.physical() && indexCursor == null) {
+                indexCursor = table.getIndex(access.index().name()).openCursor(DBMS.getTransaction(), null);
+            }
             if (beforeFirst) {
-                Object term = SqlValues.applyAffinity(indexedColumn, lookupValue.getValue());
-                if (term == null) { status = OperationStatus.NOTFOUND; }
-                else {
-                    secondaryKey.setData(IndexCatalog.indexKey(term));
+                List<Object> terms = new ArrayList<>();
+                for (int i = 0; i < access.columns().size(); i++) {
+                    int position = access.columns().get(i);
+                    Object term = lookupValues.get(i).getValue();
+                    if (position < table.numColumns()) { term = SqlValues.applyAffinity(table.getColumn(position), term); }
+                    terms.add(term);
+                }
+                byte[] lookup = terms.contains(null) ? null : access.physical()
+                        ? KeyLookup.physicalKey(table, terms.get(0)) : IndexCatalog.indexKey(terms);
+                if (lookup == null) { status = OperationStatus.NOTFOUND; }
+                else if (access.physical()) {
+                    key.setData(lookup);
+                    status = cursor.getSearchKey(key, value, null);
+                } else {
+                    secondaryKey.setData(lookup);
                     status = indexCursor.getSearchKey(secondaryKey, key, value, null);
                 }
-            } else { status = indexCursor.getNextDup(secondaryKey, key, value, null); }
+            } else { status = access.physical() ? OperationStatus.NOTFOUND : indexCursor.getNextDup(secondaryKey, key, value, null); }
         }
         beforeFirst = false;
         positioned = status == OperationStatus.SUCCESS;

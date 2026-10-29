@@ -104,6 +104,10 @@ tables from older formats without reading data. Hidden IDs are absent from the
 declared column list and `SELECT *`. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
 Columns also expose `unique`, `hasDefault`, `defaultValue`, and `defaultSql`; tables expose
 `checks`, `foreignKeys`, `primaryKeyColumns`, `uniqueKeys`, `indexes`, and `constraints`.
+Indexes expose `columns` and `origin` alongside the original single-column fields.
+Internal constraint indexes use `PRIMARY KEY` or `UNIQUE` origins. Adapter opens
+never build missing indexes; writable engine startup performs any backfill.
+See [PERFORMANCE.md](PERFORMANCE.md).
 Default SQL remains unevaluated; declaration metadata preserves names and column
 ownership. These describe persisted constraints without reading
 rows or resolving parent tables. See [CONSTRAINTS.md](CONSTRAINTS.md).

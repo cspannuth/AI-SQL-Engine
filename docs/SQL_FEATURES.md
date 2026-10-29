@@ -34,12 +34,17 @@ are documented in [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md).
 CREATE [UNIQUE] INDEX accepts one declared column and optional IF NOT EXISTS.
 DROP INDEX accepts IF EXISTS. Secondary indexes populate existing data and follow
 inserts, updates, deletes, schema renames, rollback, and restart transactionally.
-The planner selects equality lookups for constants, positional parameters, and
-earlier join inputs. Other access paths remain scans. EXPLAIN resolves plans
+PRIMARY KEY/UNIQUE declarations also create internal single/composite indexes
+unless the physical key already serves that constraint. Writable startup
+backfills missing constraint indexes without rewriting row bytes; adapters do not.
+The planner selects physical or secondary equality lookups for constants,
+positional parameters, and available join inputs. Inner joins can be reordered
+and filtered early; explicit CROSS JOIN keeps source order. Other access paths remain scans. EXPLAIN resolves plans
 without scanning table rows, including derived/CTE metadata.
 
-Expression/partial/composite indexes, index order/range optimization,
-automatic constraint indexes, and cost-based planning remain unsupported.
+User-declared composite/partial/expression indexes, index order/range optimization,
+temporary automatic indexes, and statistics-based planning remain unsupported.
+See [PERFORMANCE.md](PERFORMANCE.md) for migration, metadata, and measured checks.
 
 ## Query composition
 

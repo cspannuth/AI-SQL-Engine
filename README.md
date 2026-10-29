@@ -23,6 +23,11 @@ transactions, joins, grouping, aggregates, subqueries, ordinary CTEs, indexes,
 and more. See the [SQL compatibility matrix](docs/SQL_COMPATIBILITY.md) for
 supported forms and known differences from SQLite.
 
+Primary and unique keys receive automatic indexes where needed. The planner uses
+key lookups, early filters, and inner-join ordering to reduce repeated scans.
+See [indexing and performance](docs/PERFORMANCE.md) for existing-database upgrades,
+query plans, measurements, and current limits.
+
 ### How a question is answered
 
 ```mermaid

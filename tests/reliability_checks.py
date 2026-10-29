@@ -304,8 +304,16 @@ def check_recovery(classpath, home, run_engine):
             plan_sql = "EXPLAIN QUERY PLAN SELECT id FROM parent WHERE label='one';"
             transcript.append(plan_sql)
             plan = run_engine(classpath, directory / "engine", [plan_sql])[0]
-            if "USING INDEX parent_label" not in str(plan.get("rows")):
+            if "USING INDEX" not in str(plan.get("rows")):
                 raise AssertionError(f"Recovery lost the equality index: {plan}")
+            # A constraint index may now win over the equivalent user index. Dropping the
+            # user index proves its metadata and physical database both survived recovery.
+            drop_sql = "DROP INDEX parent_label;"
+            transcript.append(drop_sql)
+            compare(reference, drop_sql, run_engine(classpath, directory / "engine", [drop_sql])[0])
+            constraint_plan = run_engine(classpath, directory / "engine", [plan_sql])[0]
+            if "USING INDEX __dbms_auto_" not in str(constraint_plan.get("rows")):
+                raise AssertionError(f"Recovery lost the constraint index: {constraint_plan}")
         except Exception as error:
             save_failure(f"recovery-{name}", transcript, error)
         finally:

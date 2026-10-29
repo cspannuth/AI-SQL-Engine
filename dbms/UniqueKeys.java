@@ -12,7 +12,7 @@ final class UniqueKeys {
         if (!primary.isEmpty()) { result.add(primary); }
         for (List<String> columns : table.getUniqueKeys()) { result.add(indexes(table,columns)); }
         for (IndexDefinition index : IndexCatalog.forTable(table.getName())) {
-            if(index.unique()) { result.add(indexes(table,List.of(index.column()))); }
+            if(index.unique()) { result.add(indexes(table,index.columns())); }
         }
         return result;
     }

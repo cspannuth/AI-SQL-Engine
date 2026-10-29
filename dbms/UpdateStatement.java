@@ -34,6 +34,7 @@ public class UpdateStatement extends SQLStatement {
         try (TableIterator iterator = new TableIterator(this, table, true);
              QueryContext.Scope scope=QueryContext.sources(List.of(iterator))) {
             bindColumns(List.of(iterator));
+            QueryPlan.choose(iterator, getWhere(), 0, List.of(iterator));
             for (Column assignment : assignments) {
                 if (!assigned.add(assignment.getIndex())) {
                     throw new IllegalArgumentException("Duplicate assignment: " + assignment);

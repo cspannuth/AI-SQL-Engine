@@ -35,8 +35,12 @@ Renames, added columns, rollback, table deletion, and restart preserve index sta
 Validation: compilation, prior stage gates, 41 index SQLite comparisons, and
 IndexTests verifying SEARCH plans and exactly one scanned row for a lookup in a
 100-row table. Read-only adapter discovery includes index definitions and permits
-EXPLAIN QUERY PLAN under the same table policy. Range/order index optimization,
-expression/partial/composite indexes, and cost-based planning remain future work.
+EXPLAIN QUERY PLAN under the same table policy. The subsequent performance step
+adds physical key probes, automatic single/composite constraint indexes, early
+inner-join filters, heuristic join ordering, and indexed constraint validation.
+See [PERFORMANCE.md](PERFORMANCE.md) for existing-database backfills and scan gates.
+Range/order access, user-declared composite/partial/expression indexes, temporary
+automatic indexes, and statistics-based planning remain future work.
 
 ## 3. Query composition — verified
 

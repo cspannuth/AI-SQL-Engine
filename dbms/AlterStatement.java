@@ -135,7 +135,7 @@ public final class AlterStatement extends SQLStatement {
                 keys.add(ByteBuffer.wrap(iterator.getKey()));
             }
         }
-        ConstraintValidator.validateChange(edited, records, keys);
+        ConstraintValidator.validateRewrite(edited, records, keys);
         Catalog.replaceMetadata(edited, metadata);
         original.adoptColumns(edited);
         for (InsertRow record : records) {

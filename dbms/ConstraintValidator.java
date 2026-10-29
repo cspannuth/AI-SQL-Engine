@@ -9,6 +9,7 @@ final class ConstraintValidator {
     private final boolean dropping;
     private final Map<String, List<Object[]>> rows = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private boolean forceDeferred;
+    private boolean rewriting;
     private static final ThreadLocal<Map<String,List<Object[]>>> OVERLAY=new ThreadLocal<>();
     static QueryContext.Scope overlay(Map<String,List<Object[]>> rows) {
         Map<String,List<Object[]>> before=OVERLAY.get(); OVERLAY.set(rows); return ()->OVERLAY.set(before);
@@ -35,6 +36,11 @@ final class ConstraintValidator {
 
     static void validateChange(Table table, List<InsertRow> additions, Set<ByteBuffer> removed) {
         new ConstraintValidator(table, additions, removed, false).validate();
+    }
+    static void validateRewrite(Table table, List<InsertRow> additions, Set<ByteBuffer> removed) {
+        ConstraintValidator validator = new ConstraintValidator(table, additions, removed, false);
+        validator.rewriting = true;
+        validator.validate();
     }
     static void checkRows(Table table,List<InsertRow> rows) {
         new ConstraintValidator(table,rows,Set.of(),false).validateChecks();
@@ -84,10 +90,29 @@ final class ConstraintValidator {
     }
 
     private void validateUnique() {
-        boolean scan=UniqueKeys.keys(changed).stream().anyMatch(key->
-                !(key.size()==1 && (changed.usesRowIds() ? key.get(0)==changed.getRowIdColumn()
-                        : changed.getColumn(key.get(0)).isPrimaryKey())));
-        if(scan) { UniqueKeys.validate(changed,tableRows(changed)); }
+        if (additions.isEmpty()) { return; }
+        if (rewriting || OVERLAY.get() != null && OVERLAY.get().containsKey(changed.getName())) {
+            UniqueKeys.validate(changed, tableRows(changed));
+            return;
+        }
+        Set<Set<Integer>> checked = new HashSet<>();
+        for (List<Integer> positions : UniqueKeys.keys(changed)) {
+            if (!checked.add(new HashSet<>(positions))
+                    || UniqueKeys.matches(positions, KeyLookup.physicalColumns(changed))) { continue; }
+            if (KeyLookup.choose(changed, positions) == null) {
+                UniqueKeys.validate(changed, tableRows(changed));
+                return;
+            }
+            List<Column> columns = positions.stream().map(changed::getColumn).toList();
+            Set<List<Object>> pending = new HashSet<>();
+            for (InsertRow row : additions) {
+                List<Object> key = ForeignKeys.parentKey(columns, row.getValues());
+                if (key.contains(null)) { continue; }
+                if (!pending.add(key) || KeyLookup.exists(changed, columns, key, removed)) {
+                    throw new IllegalArgumentException("UNIQUE constraint failed: " + changed + " " + positions);
+                }
+            }
+        }
     }
 
     private void validateChecks() {
@@ -118,6 +143,18 @@ final class ConstraintValidator {
         try { targets=ForeignKeys.parents(parent,reference); }
         catch(IllegalArgumentException mismatch) { if(dropping) { return; } throw mismatch; }
         if(reference.deferred() && !forceDeferred) { return; }
+        boolean overlaid = parent.getName().equalsIgnoreCase(changed.getName())
+                || OVERLAY.get() != null && OVERLAY.get().containsKey(parent.getName());
+        if (!overlaid && KeyLookup.choose(parent, targets.stream().map(Column::getIndex).toList()) != null) {
+            Set<List<Object>> verified = new HashSet<>();
+            for (Object[] row : childRows) {
+                List<Object> key = ForeignKeys.childKey(targets, sources, row);
+                if (!key.contains(null) && verified.add(key) && !KeyLookup.exists(parent, targets, key, Set.of())) {
+                    throw new IllegalArgumentException("FOREIGN KEY constraint failed: " + child + " " + reference.columns());
+                }
+            }
+            return;
+        }
         Set<List<Object>> parentValues = new HashSet<>();
         for (Object[] row : tableRows(parent)) {
             List<Object> key=ForeignKeys.parentKey(targets,row);

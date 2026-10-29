@@ -141,7 +141,7 @@ public final class DatabaseAdapter implements AutoCloseable {
             if (DBMS.getEnv() != null) {
                 throw error(ErrorCode.INVALID_REQUEST, "Another database session is already open", null, null);
             }
-            try { DBMS.init(Objects.requireNonNull(home)); }
+            try { DBMS.init(Objects.requireNonNull(home), false); }
             catch (RuntimeException e) { throw error(ErrorCode.DATABASE_ERROR, "Could not open the database", null, e); }
             environment = DBMS.getEnv();
         }

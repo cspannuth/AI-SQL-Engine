@@ -40,6 +40,11 @@ public class DBMS {
 
     /** Tests and applications choose a database without changing directory. */
     public static synchronized void init(Path home) {
+        init(home, true);
+    }
+
+    /** Adapter opens avoid index backfills, which can scan tables outside the caller's policy. */
+    static synchronized void init(Path home, boolean buildConstraintIndexes) {
         if (env != null) { throw new IllegalStateException("The database is already open"); }
         try {
             Files.createDirectories(home);
@@ -49,10 +54,29 @@ public class DBMS {
             env = new Environment(home.toFile(), config);
             Catalog.open();
             Table.cacheInit();
+            if (buildConstraintIndexes) { buildConstraintIndexes(); }
         } catch (IOException | RuntimeException e) {
             shutdown();
             throw new IllegalStateException("Could not open database: " + home, e);
         }
+    }
+
+    private static void buildConstraintIndexes() {
+        transaction = env.beginTransaction(null, null);
+        try {
+            for (String name : Catalog.listTableNames()) {
+                Table table = new Table(name);
+                table.open();
+                IndexCatalog.ensureConstraints(table);
+            }
+            Table.cacheClose();
+            Transaction completed = transaction;
+            transaction = null;
+            completed.commit();
+        } catch (RuntimeException error) {
+            if (transaction != null) { rollbackTransaction(); }
+            throw error;
+        } finally { Table.cacheInit(); }
     }
 
     /** Parse and execute one SQL statement. */

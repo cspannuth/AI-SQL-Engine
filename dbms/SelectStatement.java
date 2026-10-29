@@ -101,6 +101,9 @@ public class SelectStatement extends QueryStatement {
         final List<AggregateTerm> aggregates = new ArrayList<>();
         final Map<List<Object>, Group> groups = new LinkedHashMap<>();
         final List<ResultRow> rows = new ArrayList<>();
+        final List<List<ConditionalExpression>> filters = new ArrayList<>();
+        final List<ConditionalExpression> finalFilters = new ArrayList<>();
+        boolean plannedInnerJoins;
         boolean grouped;
         int representativeAggregate = -1;
 
@@ -174,10 +177,6 @@ public class SelectStatement extends QueryStatement {
                     for (QueryStatement query : expression.getSubqueries()) { query.describeChecked(); }
                 }
             }
-            for (int i = 0; i < iterators.size(); i++) {
-                QueryPlan.choose(iterators.get(i), getWhere(), i, iterators);
-                QueryPlan.choose(iterators.get(i), from.conditions.get(i), i, iterators);
-            }
             for (int i = 0; i < from.conditions.size(); i++) {
                 ConditionalExpression condition = from.conditions.get(i);
                 if (condition == null) { continue; }
@@ -187,6 +186,7 @@ public class SelectStatement extends QueryStatement {
                     }
                 }
             }
+            plan();
             // The same expression may be referenced by both its SELECT alias and ORDER BY.
             List<AggregateTerm> unique = new ArrayList<>(new LinkedHashSet<>(aggregates));
             aggregates.clear();
@@ -201,6 +201,36 @@ public class SelectStatement extends QueryStatement {
             if (grouped && groupBy.isEmpty()) {
                 QueryBudget.reserveWorkingRow(8L * aggregates.size());
                 groups.put(List.of(), new Group());
+            }
+        }
+
+        private void plan() {
+            List<ConditionalExpression> predicates = new ArrayList<>(QueryPlan.conjuncts(getWhere()));
+            for (ConditionalExpression condition : from.conditions) { predicates.addAll(QueryPlan.conjuncts(condition)); }
+            // Keep outer joins and predicates containing nested queries in their original scopes.
+            plannedInnerJoins = !from.leftJoins.contains(true)
+                    && predicates.stream().allMatch(predicate -> predicate.getSubqueries().isEmpty());
+            if (plannedInnerJoins && from.reorderable) {
+                List<TableIterator> order = QueryPlan.order(iterators, predicates);
+                iterators.clear(); iterators.addAll(order);
+            }
+            for (int i = 0; i < iterators.size(); i++) { filters.add(new ArrayList<>()); }
+            if (plannedInnerJoins) {
+                for (ConditionalExpression predicate : predicates) {
+                    int depth = 0;
+                    for (Column column : predicate.getColumns()) {
+                        depth = Math.max(depth, iterators.indexOf(column.getTableIterator()));
+                    }
+                    if (iterators.isEmpty()) { finalFilters.add(predicate); }
+                    else { filters.get(depth).add(predicate); }
+                }
+            } else if (getWhere() != null) { finalFilters.add(getWhere()); }
+            for (int i = 0; i < iterators.size(); i++) {
+                List<ConditionalExpression> available = plannedInnerJoins ? predicates
+                        : new ArrayList<>(QueryPlan.conjuncts(getWhere()));
+                if (!plannedInnerJoins) { available.addAll(QueryPlan.conjuncts(from.conditions.get(i))); }
+                QueryPlan.Lookup lookup = QueryPlan.lookup(iterators.get(i), available, iterators.subList(0, i), iterators);
+                if (lookup != null) { iterators.get(i).lookup(lookup.path(), lookup.values()); }
             }
         }
 
@@ -240,20 +270,20 @@ public class SelectStatement extends QueryStatement {
             QueryBudget.check();
             if (enoughRows()) { return; }
             if (depth == iterators.size()) {
-                if (getWhere() == null || getWhere().isTrue()) { consume(); }
+                if (finalFilters.stream().allMatch(ConditionalExpression::isTrue)) { consume(); }
                 return;
             }
             TableIterator iterator = iterators.get(depth);
             iterator.rewind();
             boolean matched = false;
-            ConditionalExpression on = from.conditions.get(depth);
+            ConditionalExpression on = plannedInnerJoins ? null : from.conditions.get(depth);
             while (!enoughRows() && iterator.next()) {
                 if (on == null || on.isTrue()) {
                     matched = true;
-                    scan(depth + 1);
+                    if (filters.get(depth).stream().allMatch(ConditionalExpression::isTrue)) { scan(depth + 1); }
                 }
             }
-            if (!matched && from.leftJoins.get(depth)) {
+            if (!plannedInnerJoins && !matched && from.leftJoins.get(depth)) {
                 iterator.useSnapshot(new Object[iterator.numColumns() + 1]);
                 scan(depth + 1);
             }

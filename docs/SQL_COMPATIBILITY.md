@@ -10,7 +10,7 @@ remain in place.
 | Area | Implemented |
 | --- | --- |
 | Schema | CREATE/DROP TABLE; ALTER TABLE ADD/DROP [COLUMN], RENAME [COLUMN], RENAME TO; named column/table constraints; PRIMARY KEY, NOT NULL, UNIQUE, CHECK, REFERENCES/FOREIGN KEY, including composite keys |
-| Indexes | CREATE [UNIQUE] INDEX, DROP INDEX, IF [NOT] EXISTS; single declared column; equality lookup planning and EXPLAIN QUERY PLAN |
+| Indexes | CREATE [UNIQUE] INDEX, DROP INDEX, IF [NOT] EXISTS; single declared column; automatic single/composite constraint indexes; physical/secondary equality lookups and EXPLAIN QUERY PLAN |
 | Row identity | New tables have hidden rowid/oid/_rowid_ aliases; INTEGER PRIMARY KEY aliases the ID; omitted or NULL INSERT IDs are generated |
 | Types | INTEGER/INT, REAL/DOUBLE/FLOAT, CHAR(n), VARCHAR(n), TEXT; optional VARCHAR length and default CHAR length 1 |
 | Inserts | VALUES rows, literal/expression/UTC time defaults, DEFAULT VALUES, INSERT ... SELECT; one ON CONFLICT clause with DO NOTHING or DO UPDATE/WHERE; excluded values |
@@ -87,8 +87,12 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   conservatively roll back the entire active transaction.
 - **Execution:** one serialized database session owns process-wide state.
   Concurrency across independent SQL sessions is not implemented. Queries use
-  equality index lookups or scans with nested-loop joins. Range/order/composite
-  index optimization and cost-based planning remain work. Sorting, grouping,
+  physical/secondary equality lookups or scans with nested-loop joins. Safe inner
+  joins use early filters and heuristic reordering; CROSS JOIN preserves order,
+  and LEFT JOIN/nested-predicate scopes retain conservative execution. Composite
+  constraint indexes support full-key equality. User-declared composite indexes,
+  range/order access, temporary automatic indexes, and statistics-based planning
+  remain work. See [PERFORMANCE.md](PERFORMANCE.md). Sorting, grouping,
   compounds, CTEs, and mutations materialize working data. Savepoints store full
   raw in-memory snapshots and rebuild secondary indexes on rewind; their cost
   scales with database size and mark count. The local

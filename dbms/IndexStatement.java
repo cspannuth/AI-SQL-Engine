@@ -22,6 +22,7 @@ public final class IndexStatement extends SQLStatement {
             if (existing == null) {
                 if (!optional) { throw new IllegalArgumentException("No such index: " + name); }
             } else {
+                if (existing.internal()) { throw new IllegalArgumentException("Cannot drop a constraint index: " + name); }
                 Table.cacheClose();
                 IndexCatalog.drop(existing);
             }

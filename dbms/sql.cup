@@ -281,7 +281,7 @@ table_reference ::= table:t alias:a {: t.setRangeVariable(a); RESULT = t; :}
 from_clause ::= FROM from_list:f {: RESULT = f; :} | {: RESULT = new FromClause(); :};
 from_list ::= table_reference:t {: RESULT = new FromClause().add(t, null, false); :}
     | from_list:f COMMA table_reference:t {: RESULT = f.add(t, null, false); :}
-    | from_list:f CROSS JOIN table_reference:t {: RESULT = f.add(t, null, false); :}
+    | from_list:f CROSS JOIN table_reference:t {: RESULT = f.crossJoin(t); :}
     | from_list:f JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, false); :}
     | from_list:f INNER JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, false); :}
     | from_list:f LEFT optional_outer JOIN table_reference:t ON condition:c {: RESULT = f.add(t, c, true); :};

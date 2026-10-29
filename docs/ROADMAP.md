@@ -36,6 +36,10 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 - ALTER additions/renames/column removal; persistent single-column indexes and equality plans;
   subqueries, derived tables, ordinary CTEs and compounds; CASE, CAST, and scalar
   null/text/numeric/UTC date functions.
+- Automatic single/composite constraint indexes, direct physical key lookups,
+  early inner-join filters and heuristic join ordering, and indexed uniqueness/
+  parent-reference probes. Writable startup backfills missing indexes without
+  rewriting row bytes. See [PERFORMANCE.md](PERFORMANCE.md) for measured results.
 - Case-insensitive identifiers, underscores, quoted identifiers, escaped strings,
   SQL comments, and multiline CLI statements.
 - Typed result values and exceptions independently of CLI printing.
@@ -71,8 +75,10 @@ old-format, and recovery tests. See [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md).
    triggers, named parameters, additional functions/operators, and collations.
 3. **Write parity.** Multiple conflict clauses, OR REPLACE/IGNORE, broader RETURNING,
    and SQLite's exact immediate uniqueness/self-referential mutation ordering.
-4. **Planning.** Range/order/composite/partial/expression indexes, automatic
-   constraint indexes, cost-based plans, and better join access paths.
+4. **Planning.** Range/order access, user-declared composite/partial/expression
+   indexes, temporary automatic indexes, statistics-based plans, and broader
+   join optimization. Automatic constraint indexes and initial filter/join-order
+   improvements are implemented and tested; see [PERFORMANCE.md](PERFORMANCE.md).
 5. **Resource use.** Streaming, hard execution isolation, and more scalable
    savepoints. Current savepoints snapshot engine-owned data in memory; nested
    queries, sorting, grouping, and mutations also materialize working data.
