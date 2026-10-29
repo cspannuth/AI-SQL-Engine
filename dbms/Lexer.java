@@ -206,6 +206,7 @@ public class Lexer implements java_cup.runtime.Scanner {
             case "IF": return token(sym.IF);
             case "EXISTS": return token(sym.EXISTS);
             case "PRIMARY": return token(sym.PRIMARY);
+            case "CONSTRAINT": return token(sym.CONSTRAINT);
             case "DEFAULT": return token(sym.DEFAULT);
             case "UNIQUE": return token(sym.UNIQUE);
             case "CHECK": return token(sym.CHECK);

@@ -39,6 +39,7 @@ public class Column extends CompareTerm {
     private boolean unique;
     private boolean hasDefault;
     private Object defaultValue;
+    private DefaultExpression defaultExpression;
     private Object updateVal;
     private boolean shouldUpdate;
     private int index;           // the index of the column in its table
@@ -87,6 +88,7 @@ public class Column extends CompareTerm {
         this.unique = col.unique;
         this.hasDefault = col.hasDefault;
         this.defaultValue = col.defaultValue;
+        this.defaultExpression = col.defaultExpression;
         this.index = col.index;
         this.updateVal = col.updateVal; 
         this.tableIter = col.tableIter;
@@ -338,7 +340,10 @@ public class Column extends CompareTerm {
             this.isPrimaryKey = true;
         }
         if (opts.isUnique()) { unique = true; }
-        if (opts.hasDefault()) { setDefaultValue(opts.getDefaultValue()); }
+        if (opts.hasDefault()) {
+            if (opts.getDefaultSql() == null) { setDefaultValue(opts.getDefaultValue()); }
+            else { setDefaultExpression(opts.getDefaultSql()); }
+        }
     }
     
     /**
@@ -408,6 +413,7 @@ public class Column extends CompareTerm {
         this.unique = other.unique;
         this.hasDefault = other.hasDefault;
         this.defaultValue = other.defaultValue;
+        this.defaultExpression = other.defaultExpression;
         this.index = other.index;
         queryType = other.queryType;
         affinity = other.affinity;
@@ -428,7 +434,15 @@ public class Column extends CompareTerm {
     public void setUnique(boolean value) { unique = value; }
     public boolean hasDefault() { return hasDefault; }
     public Object getDefaultValue() { return defaultValue; }
-    public void setDefaultValue(Object value) { hasDefault = true; defaultValue = value; }
+    public void setDefaultValue(Object value) { hasDefault = true; defaultValue = value; defaultExpression = null; }
+    public String getDefaultSql() { return defaultExpression == null ? null : defaultExpression.sql(); }
+    public void setDefaultExpression(String sql) {
+        defaultExpression = new DefaultExpression(sql);
+        hasDefault = true;
+        defaultValue = null;
+    }
+    Object evaluateDefault() { return defaultExpression == null ? defaultValue : defaultExpression.evaluate(); }
+    boolean hasLiteralDefault() { return defaultExpression == null || defaultExpression.isLiteral(); }
     
     /**
      * Sets the table iterator used to obtain the values of this column.

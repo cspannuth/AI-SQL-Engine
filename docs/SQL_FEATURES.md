@@ -14,6 +14,7 @@ CREATE TABLE accounts (
 );
 ALTER TABLE accounts ADD COLUMN label TEXT DEFAULT 'new';
 ALTER TABLE accounts RENAME COLUMN label TO display_name;
+ALTER TABLE accounts DROP COLUMN display_name;
 
 CREATE INDEX email_lookup ON accounts(email);
 EXPLAIN QUERY PLAN SELECT id FROM accounts WHERE email='person@example.com';
@@ -24,7 +25,11 @@ ALTER also supports `RENAME TO new_table`. Renames update CHECK identifiers,
 foreign-key descriptors, and explicit index definitions without replacing string
 literals. ADD validates existing rows and retains physical keys and encodings.
 ADD PRIMARY KEY/UNIQUE is prohibited; an added NOT NULL column needs a non-null
-literal default, and an added REFERENCES column must default to NULL.
+default, and an added REFERENCES column must default to NULL. Populated tables
+accept literal defaults and signs/casts of literals; empty tables can acquire
+expression/time defaults. DROP prepares rows and rebuilds surviving indexes,
+rejecting retained dependencies. Named declarations and expression/time defaults
+are documented in [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md).
 
 CREATE [UNIQUE] INDEX accepts one declared column and optional IF NOT EXISTS.
 DROP INDEX accepts IF EXISTS. Secondary indexes populate existing data and follow
@@ -33,7 +38,7 @@ The planner selects equality lookups for constants, positional parameters, and
 earlier join inputs. Other access paths remain scans. EXPLAIN resolves plans
 without scanning table rows, including derived/CTE metadata.
 
-DROP COLUMN, expression/partial/composite indexes, index order/range optimization,
+Expression/partial/composite indexes, index order/range optimization,
 automatic constraint indexes, and cost-based planning remain unsupported.
 
 ## Query composition

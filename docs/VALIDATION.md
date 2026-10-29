@@ -102,3 +102,8 @@ memory; grouping, sorting, CTEs, and other operations still materialize working
 data. Deadlines remain cooperative, and independent concurrent sessions remain
 unsupported. Further SQLite differences are listed in
 [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
+
+The subsequent schema gates add expression/time defaults, named constraints, and
+DROP COLUMN, including two more schema-rewrite crash scenarios. They also run
+in the complete suite; see [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md) for commands,
+older-format coverage, and remaining restrictions.

@@ -30,6 +30,10 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `dbms/RowIdentity.java`: version 2 physical keys, ID allocation, and conversion.
   Later catalogs keep this encoding; earlier versions retain their original keys.
 - `dbms/SchemaDefinition.java`, `ColumnOptions.java`: parser-time schema builders.
+- `dbms/DefaultExpression.java`, `SchemaConstraint.java`: validated default SQL
+  and declaration names/scope; metadata discovery never evaluates defaults.
+- `dbms/DropColumnStatement.java`: dependency checks and prepared row rewrites;
+  rebuild surviving indexes when column positions change.
 - `dbms/ConstraintValidator.java`, `CheckConstraint.java`, `ForeignKey.java`:
   proposed-state validation, compiled CHECK expressions, and reference metadata.
 - `dbms/IndexCatalog.java`, `QueryPlan.java`: transactional secondary indexes and
@@ -53,6 +57,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `tests/reliability_checks.py`, `tests/ScaleTests.java`: seeded SQL comparisons,
   acknowledged-boundary crash scenarios, and moderate-size resource/index checks.
   See [docs/VALIDATION.md](docs/VALIDATION.md) for reproduction and limits.
+- `tests/schema_checks.py`: cumulative defaults/names/DROP gates, older-format
+  fixtures, and forced termination around committed/pending schema rewrites.
 
 CRUD and explicit transactions are implemented, including atomic catalog changes.
 SELECT supports projections, aliases, DISTINCT, joins, grouping, common aggregates,
@@ -61,12 +67,13 @@ HAVING, ordering, scalar expressions, predicates, and limits. Consult
 remaining differences from SQLite. Results are returned through `QueryResult`;
 SQL failures propagate to the caller rather than only printing an error.
 New tables use internal row IDs; exact INTEGER PRIMARY KEY declarations alias
-them. New catalog version 5 persists defaults, CHECK, ordered/composite keys,
-reference actions, and deferral. The separate row-format marker preserves legacy
+them. New catalog version 6 persists default SQL and declaration names/scope along
+with defaults, CHECK, ordered/composite keys, reference actions, and deferral.
+The separate row-format marker preserves legacy
 keys/encodings during ALTER. Validate prepared statements and referential actions
 before their first write; deferred references are checked at commit. Read queries
 must not trigger deferred validation or scan unauthorized tables. Foreign keys
-are always enabled. Preserve version 0–4 behavior and test
+are always enabled. Preserve version 0–5 behavior and test
 older fixtures. See [docs/CONSTRAINTS.md](docs/CONSTRAINTS.md). The row format rules
 are documented in [docs/ROW_IDENTITY.md](docs/ROW_IDENTITY.md).
 
@@ -102,6 +109,7 @@ python scripts/build.py
 python tests/run_tests.py
 python tests/stage_checks.py --through savepoints
 python tests/reliability_checks.py --seed 42
+python tests/schema_checks.py --through drop
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`

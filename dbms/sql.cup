@@ -9,7 +9,7 @@ parser code {:
 
     public void setSourceSql(String sql) { sourceSql = sql; }
     public String expressionSql(int start, int end) {
-        if (sourceSql == null) { throw new IllegalArgumentException("CHECK requires SQL source text"); }
+        if (sourceSql == null) { throw new IllegalArgumentException("Schema expressions require SQL source text"); }
         return sourceSql.substring(start, end);
     }
 
@@ -67,7 +67,7 @@ action code {:
 
 terminal SELECT, FROM, WHERE, DISTINCT, ALL, AS, LIMIT, OFFSET;
 terminal CREATE, DROP, TABLE, IF, EXISTS, PRIMARY, KEY, NOT, NULL;
-terminal DEFAULT, UNIQUE, CHECK, REFERENCES, FOREIGN;
+terminal DEFAULT, UNIQUE, CHECK, REFERENCES, FOREIGN, CONSTRAINT;
 terminal ALTER, ADD, COLUMN, RENAME, TO;
 terminal INDEX, EXPLAIN, QUERY, PLAN;
 terminal WITH, UNION, INTERSECT, EXCEPT;
@@ -147,6 +147,7 @@ command ::= create_statement:c {: RESULT = c; :}
           | ALTER TABLE table:t RENAME TO ID:n {: RESULT = new AlterStatement(t, null, n, null); :}
           | ALTER TABLE table:t RENAME optional_column ID:c TO ID:n
             {: RESULT = new AlterStatement(t, c, n, null); :}
+          | ALTER TABLE table:t DROP optional_column ID:c {: RESULT = new DropColumnStatement(t, c); :}
           | drop_statement:c {: RESULT = c; :}
           | query:c {: RESULT = c; :}
           | WITH cte_list:d insert_statement:i {: RESULT = new WithStatement(d, i); :}
@@ -181,9 +182,17 @@ definitions ::= column_definition:c {: RESULT = c; :}
     | definitions:d COMMA UNIQUE LPAREN column_list:c RPAREN
       {: d.finishColumns(); d.uniqueKey(names(c)); RESULT = d; :}
     | definitions:d COMMA CHECK LPAREN expression:e RPAREN
-      {: d.finishColumns(); d.checks.add(parser.expressionSql(eleft, eright)); RESULT = d; :}
+      {: d.finishColumns(); d.check(parser.expressionSql(eleft, eright)); RESULT = d; :}
     | definitions:d COMMA FOREIGN KEY LPAREN column_list:c RPAREN reference_clause:f reference_deferred:b
-      {: d.finishColumns(); d.foreignKeys.add(f.withColumns(names(c)).withDeferred(b)); RESULT = d; :};
+      {: d.finishColumns(); d.reference(f.withColumns(names(c)).withDeferred(b)); RESULT = d; :}
+    | definitions:d COMMA CONSTRAINT ID:n PRIMARY KEY LPAREN column_list:c RPAREN
+      {: d.finishColumns(); d.primaryKey(names(c)); d.nameLast(n); RESULT = d; :}
+    | definitions:d COMMA CONSTRAINT ID:n UNIQUE LPAREN column_list:c RPAREN
+      {: d.finishColumns(); d.uniqueKey(names(c)); d.nameLast(n); RESULT = d; :}
+    | definitions:d COMMA CONSTRAINT ID:n CHECK LPAREN expression:e RPAREN
+      {: d.finishColumns(); d.check(parser.expressionSql(eleft, eright)); d.nameLast(n); RESULT = d; :}
+    | definitions:d COMMA CONSTRAINT ID:n FOREIGN KEY LPAREN column_list:c RPAREN reference_clause:f reference_deferred:b
+      {: d.finishColumns(); d.reference(f.withColumns(names(c)).withDeferred(b)); d.nameLast(n); RESULT = d; :};
 column_definition ::= column:c INTEGER:t column_options:o
     {: c.setDeclaredInteger(t.equals("INTEGER")); RESULT = define(c, Column.INTEGER, null, o); :}
     | column:c REAL column_options:o {: RESULT = define(c, Column.REAL, null, o); :}
@@ -196,6 +205,23 @@ column_options ::= column_options:o PRIMARY KEY {: RESULT = o.primaryKey(); :}
     | column_options:o NOT NULL {: RESULT = o.notNull(); :}
     | column_options:o UNIQUE {: RESULT = o.unique(); :}
     | column_options:o DEFAULT default_value:v {: RESULT = o.defaultValue(v); :}
+    | column_options:o DEFAULT LPAREN expression:e RPAREN
+      {: RESULT = o.defaultExpression("(" + parser.expressionSql(eleft, eright) + ")"); :}
+    | column_options:o DEFAULT CURRENT_DATE {: RESULT = o.defaultExpression("CURRENT_DATE"); :}
+    | column_options:o DEFAULT CURRENT_TIME {: RESULT = o.defaultExpression("CURRENT_TIME"); :}
+    | column_options:o DEFAULT CURRENT_TIMESTAMP {: RESULT = o.defaultExpression("CURRENT_TIMESTAMP"); :}
+    | column_options:o CONSTRAINT ID:n PRIMARY KEY {: RESULT = o.primaryKey().named(n); :}
+    | column_options:o CONSTRAINT ID:n NOT NULL {: RESULT = o.notNull().named(n); :}
+    | column_options:o CONSTRAINT ID:n UNIQUE {: RESULT = o.unique().named(n); :}
+    | column_options:o CONSTRAINT ID:n DEFAULT default_value:v {: RESULT = o.defaultValue(v).named(n); :}
+    | column_options:o CONSTRAINT ID:n DEFAULT LPAREN expression:e RPAREN
+      {: RESULT = o.defaultExpression("(" + parser.expressionSql(eleft, eright) + ")").named(n); :}
+    | column_options:o CONSTRAINT ID:n DEFAULT CURRENT_DATE {: RESULT = o.defaultExpression("CURRENT_DATE").named(n); :}
+    | column_options:o CONSTRAINT ID:n DEFAULT CURRENT_TIME {: RESULT = o.defaultExpression("CURRENT_TIME").named(n); :}
+    | column_options:o CONSTRAINT ID:n DEFAULT CURRENT_TIMESTAMP {: RESULT = o.defaultExpression("CURRENT_TIMESTAMP").named(n); :}
+    | column_options:o CONSTRAINT ID:n CHECK LPAREN expression:e RPAREN
+      {: RESULT = o.check(parser.expressionSql(eleft, eright)).named(n); :}
+    | column_options:o CONSTRAINT ID:n reference_clause:f {: RESULT = o.references(f).named(n); :}
     | column_options:o CHECK LPAREN expression:e RPAREN
       {: RESULT = o.check(parser.expressionSql(eleft, eright)); :}
     | column_options:o reference_clause:f {: RESULT = o.references(f); :}

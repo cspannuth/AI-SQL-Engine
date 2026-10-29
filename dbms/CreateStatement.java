@@ -8,6 +8,7 @@ public class CreateStatement extends SQLStatement {
     private final List<ForeignKey> foreignKeys;
     private List<String> primaryColumns=List.of();
     private List<List<String>> uniqueKeys=List.of();
+    private List<SchemaConstraint> constraints = List.of();
 
     public CreateStatement(Table table, ArrayList<Column> columns) {
         super(table, columns);
@@ -20,6 +21,7 @@ public class CreateStatement extends SQLStatement {
         foreignKeys = definition.foreignKeys;
         primaryColumns=definition.primaryColumns;
         uniqueKeys=definition.uniqueKeys;
+        constraints = definition.constraints;
     }
     public void setIfNotExists(boolean value) { ifNotExists = value; }
 
@@ -31,7 +33,7 @@ public class CreateStatement extends SQLStatement {
             throw new IllegalArgumentException(table + ": table already exists");
         }
         Set<String> names = new HashSet<>();
-        table.setStorageVersion(5);
+        table.setStorageVersion(6);
         int keys = 0;
         for (int i = 0; i < numColumns(); i++) {
             Column definition = getColumn(i);
@@ -58,6 +60,7 @@ public class CreateStatement extends SQLStatement {
         }
         table.setChecks(checks);
         table.setForeignKeys(foreignKeys);
+        table.setConstraints(constraints);
         ConstraintValidator.validateDefinition(table);
         if (Catalog.putMetadata(table) == OperationStatus.KEYEXIST) {
             throw new IllegalStateException("Table appeared during CREATE");

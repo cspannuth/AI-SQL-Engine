@@ -1,6 +1,6 @@
 # Defaults and constraints
 
-New tables support literal defaults, single/composite keys, CHECK expressions,
+New tables support literal/expression/time defaults, named declarations, single/composite keys, CHECK expressions,
 and single/composite foreign keys. The engine enforces these rules
 independently of the client or any AI workflow.
 
@@ -25,7 +25,8 @@ SELECT * FROM orders;
 
 ## DEFAULT
 
-Column defaults can be text, signed numeric literals, or NULL. Options may appear
+Column defaults can be text, signed numeric literals, NULL, parenthesized scalar
+expressions, or CURRENT_DATE/CURRENT_TIME/CURRENT_TIMESTAMP. Options may appear
 in different orders: `INTEGER DEFAULT 7 NOT NULL` and `INTEGER NOT NULL DEFAULT 7`
 are equivalent.
 
@@ -38,10 +39,11 @@ INTEGER PRIMARY KEY retains its allocation behavior: omitting it or supplying
 NULL generates a row ID, even if that column declares a literal default. See
 [ROW_IDENTITY.md](ROW_IDENTITY.md).
 
-Parenthesized expressions, function/time defaults, and parameters in schema
-definitions are unsupported. Defaults use the engine's existing stored types and
-length limits when a row is inserted; declaring a default does not disable type
-or constraint validation.
+Expressions are evaluated only when needed for an omitted INSERT value; clock
+defaults use UTC and one statement clock. Parameters, column references,
+aggregates, and subqueries are prohibited in defaults. Defaults use existing
+stored types and length limits; declaring one does not disable validation.
+See [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md) for ADD restrictions and examples.
 
 ## UNIQUE
 
@@ -150,10 +152,11 @@ statements in an explicit transaction. Storage failures retain the existing poli
 of rolling back the active transaction. BEGIN/COMMIT/ROLLBACK cover constrained
 rows and schemas; constraints survive restarts and process termination/recovery.
 
-New CREATE TABLE statements write catalog version 5, adding ordered/composite keys,
-foreign-key actions, and deferral. Version 3 introduced defaults/CHECK/references;
+New CREATE TABLE statements write catalog version 6, adding default SQL and named
+declaration metadata to version 5's ordered/composite keys, reference actions,
+and deferral. Version 3 introduced defaults/CHECK/references;
 version 4 separated schema version from row encoding for safe ALTER changes.
-Earlier versions remain readable and writable. ALTER ADD/RENAME is implemented;
+Earlier versions remain readable and writable. ALTER ADD/RENAME/DROP COLUMN is implemented;
 old tables acquire no constraints unless explicitly altered. Row keys and payloads
 retain their original encoding. See [SQL_FEATURES.md](SQL_FEATURES.md).
 
@@ -163,12 +166,14 @@ Schema discovery returns declared metadata without reading table contents:
 | --- | --- |
 | Column `unique` | Explicit single-column UNIQUE declaration; primary keys are identified separately |
 | Column `hasDefault` | Distinguishes DEFAULT NULL from no declared default |
-| Column `defaultValue` | Declared literal, including null; INTEGER PRIMARY KEY allocation still takes precedence |
+| Column `defaultValue` | Declared literal, including null; null for expression defaults; INTEGER PRIMARY KEY allocation still takes precedence |
+| Column `defaultSql` | Unevaluated SQL for an expression/time default; null for literal or absent defaults |
 | Table `checks` | Column and table CHECK expressions as SQL text |
 | Table `primaryKeyColumns` | Primary-key names in declared order |
 | Table `uniqueKeys` | Composite UNIQUE column lists; single-column flags remain on columns |
 | Table `foreignKeys` | `columns`, `parentTable`, `parentColumns`, `onDelete`, `onUpdate`, `deferred`; empty parent list means the primary key; singular fields remain for compatibility |
 | Table `indexes` | Explicit index name, table, column, and uniqueness |
+| Table `constraints` | Named/unnamed declaration kind, columns, CHECK/default expression, and inline owner; absent for original declarations in older catalogs |
 
 These fields are available through `DatabaseAdapter.describeTable`, terminal
 `.schema`, and JSON Lines `describe_table`. Parent metadata and rows are not

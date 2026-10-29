@@ -102,8 +102,10 @@ Schema-derived types remain available for empty or entirely-null columns.
 Table metadata includes `rowIdTable` and `rowIdColumn`; these distinguish new rowid
 tables from older formats without reading data. Hidden IDs are absent from the
 declared column list and `SELECT *`. See [ROW_IDENTITY.md](ROW_IDENTITY.md).
-Columns also expose `unique`, `hasDefault`, and `defaultValue`; tables expose
-`checks`, `foreignKeys`, `primaryKeyColumns`, `uniqueKeys`, and `indexes`. These describe persisted constraints without reading
+Columns also expose `unique`, `hasDefault`, `defaultValue`, and `defaultSql`; tables expose
+`checks`, `foreignKeys`, `primaryKeyColumns`, `uniqueKeys`, `indexes`, and `constraints`.
+Default SQL remains unevaluated; declaration metadata preserves names and column
+ownership. These describe persisted constraints without reading
 rows or resolving parent tables. See [CONSTRAINTS.md](CONSTRAINTS.md).
 Nulls remain null rather than becoming the string `"null"` or zero.
 Read queries may use ordinary WITH scopes, subqueries, compounds, functions, and

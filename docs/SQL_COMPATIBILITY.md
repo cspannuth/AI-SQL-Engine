@@ -9,11 +9,11 @@ remain in place.
 
 | Area | Implemented |
 | --- | --- |
-| Schema | CREATE/DROP TABLE; ALTER TABLE ADD [COLUMN], RENAME [COLUMN], RENAME TO; PRIMARY KEY, NOT NULL, UNIQUE, CHECK, REFERENCES/FOREIGN KEY, including composite keys |
+| Schema | CREATE/DROP TABLE; ALTER TABLE ADD/DROP [COLUMN], RENAME [COLUMN], RENAME TO; named column/table constraints; PRIMARY KEY, NOT NULL, UNIQUE, CHECK, REFERENCES/FOREIGN KEY, including composite keys |
 | Indexes | CREATE [UNIQUE] INDEX, DROP INDEX, IF [NOT] EXISTS; single declared column; equality lookup planning and EXPLAIN QUERY PLAN |
 | Row identity | New tables have hidden rowid/oid/_rowid_ aliases; INTEGER PRIMARY KEY aliases the ID; omitted or NULL INSERT IDs are generated |
 | Types | INTEGER/INT, REAL/DOUBLE/FLOAT, CHAR(n), VARCHAR(n), TEXT; optional VARCHAR length and default CHAR length 1 |
-| Inserts | VALUES rows, literal defaults, DEFAULT VALUES, INSERT ... SELECT; one ON CONFLICT clause with DO NOTHING or DO UPDATE/WHERE; excluded values |
+| Inserts | VALUES rows, literal/expression/UTC time defaults, DEFAULT VALUES, INSERT ... SELECT; one ON CONFLICT clause with DO NOTHING or DO UPDATE/WHERE; excluded values |
 | Updates | UPDATE ... SET ... WHERE ...; expressions evaluated against the original row; primary-key changes; all-row updates |
 | Deletes | DELETE FROM ... WHERE ...; all-row deletion |
 | Transactions | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT, RELEASE, ROLLBACK TO; automatic statement transactions; deferred foreign-key validation at commit |
@@ -55,9 +55,10 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   dynamic storage classes and VARCHAR length behavior differ. Basic comparison
   affinity and numeric expression conversion are supported, but complete SQLite
   type/formatting behavior remains work.
-- **Storage:** new version 5 catalogs persist ordered/composite keys, reference
-  actions and deferral. Version 4 introduced a separate row-format marker so ALTER
-  can retain legacy physical keys and character encodings. Versions 0–4 remain
+- **Storage:** new version 6 catalogs add default SQL and declaration names/scope
+  to version 5's ordered/composite keys and reference actions/deferral.
+  Version 4 introduced a separate row-format marker so ALTER
+  can retain legacy physical keys and character encodings. Versions 0–5 remain
   readable and writable. New tables retain version 2's row key and payload format.
   Version 1 tables retain UTF-8 and their primary-key byte representation.
   Unversioned tables retain their original single-byte encoding and integer
@@ -65,9 +66,11 @@ for MIN/MAX; ties have no guaranteed choice. Prefer explicit grouped columns.
   corrupted. Existing data is not automatically rewritten. Stored row values
   retain signed-short offsets and a 32767-byte maximum, including the header.
 - **Constraints/schema:** foreign keys are always enforced, without a PRAGMA toggle.
-  Named constraints, expression/time defaults, MATCH, AUTOINCREMENT, DROP COLUMN,
-  and arbitrary column type/constraint alterations remain work. See
-  [CONSTRAINTS.md](CONSTRAINTS.md) for supported behavior.
+  MATCH, AUTOINCREMENT, and arbitrary column type/constraint alterations remain
+  work. Defaults use supported scalar expressions and reject aggregates/unknown
+  functions at definition time. DROP rejects ambiguous legacy dependencies when
+  older metadata lacks declaration ownership. See [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md)
+  and [CONSTRAINTS.md](CONSTRAINTS.md) for supported behavior.
 - **Query language:** recursive CTEs, window functions, views, triggers, named
   parameters, NATURAL/USING/RIGHT/FULL joins, and custom collations remain work.
   Compounds order by output names/positions. Scalar functions, casts, and UTC

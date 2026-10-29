@@ -36,5 +36,6 @@ final class CastTerm extends CompositeTerm {
     }
     public SqlType getResultType() { return target; }
     public SqlType getAffinity() { return target; }
+    boolean hasLiteralValue() { return arguments.get(0).hasLiteralValue(); }
     public String toString() { return "CAST(" + arguments.get(0) + " AS " + target + ")"; }
 }

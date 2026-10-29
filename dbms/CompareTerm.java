@@ -16,6 +16,8 @@ public class CompareTerm {
     public void setValType(int type) { valType = type; }
     public int getValType() { return valType; }
     public Object getValue() { return value; }
+    /** Literal values (including signs/casts) may backfill an added column. */
+    boolean hasLiteralValue() { return getClass() == CompareTerm.class || this instanceof IntegerLiteral; }
     public SqlType getResultType() { return SqlType.of(getValue()); }
     public List<Column> getColumns() { return List.of(); }
     public List<AggregateTerm> getAggregates() { return List.of(); }

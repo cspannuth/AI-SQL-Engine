@@ -64,6 +64,7 @@ public class ArithmeticTerm extends CompareTerm {
     }
 
     public SqlType getResultType() { return operator.equals("||") ? SqlType.TEXT : SqlType.NUMERIC; }
+    boolean hasLiteralValue() { return right == null && left.hasLiteralValue(); }
 
     public List<AggregateTerm> getAggregates() {
         List<AggregateTerm> aggregates = new ArrayList<>(left.getAggregates());

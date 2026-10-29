@@ -61,7 +61,7 @@ public class Catalog {
             throw new IllegalArgumentException("A table must contain between 1 and 255 columns");
         }
         try (RowOutput out = new RowOutput()) {
-            // Zero cannot be a legacy count. V4 separates row format; V5 adds composite references.
+            // Row encoding is independent of the catalog's newer schema fields.
             out.writeByte(0);
             out.writeByte(table.getStorageVersion());
             out.writeByte(table.numColumns());
@@ -84,6 +84,7 @@ public class Catalog {
                     out.writeBoolean(column.hasDefault());
                     if (column.hasDefault()) { writeText(out, Json.stringify(column.getDefaultValue())); }
                 }
+                if (table.getStorageVersion() >= 6) { writeOptionalText(out, column.getDefaultSql()); }
             }
             if (table.getStorageVersion() >= 3) {
                 out.writeInt(table.getChecks().size());
@@ -106,6 +107,16 @@ public class Catalog {
                 out.writeInt(table.getUniqueKeys().size());
                 for(List<String> key:table.getUniqueKeys()) { writeNames(out,key); }
             }
+            if (table.getStorageVersion() >= 6) {
+                out.writeInt(table.getConstraints().size());
+                for (SchemaConstraint constraint : table.getConstraints()) {
+                    writeOptionalText(out, constraint.name());
+                    writeText(out, constraint.kind());
+                    writeNames(out, constraint.columns());
+                    writeOptionalText(out, constraint.expression());
+                    writeOptionalText(out, constraint.ownerColumn());
+                }
+            }
             return out.getBufferBytes();
         } catch (IOException e) { throw new IllegalStateException("Could not encode schema", e); }
     }
@@ -124,7 +135,7 @@ public class Catalog {
         Charset charset = StandardCharsets.ISO_8859_1;
         if (count == 0) {
             version = Byte.toUnsignedInt(in.readNextByte());
-            if (version < 1 || version > 5) {
+            if (version < 1 || version > 6) {
                 throw new IllegalStateException("Unknown schema format: " + version);
             }
             count = Byte.toUnsignedInt(in.readNextByte());
@@ -144,6 +155,10 @@ public class Catalog {
             if (version >= 3) {
                 column.setUnique(in.readNextBoolean());
                 if (in.readNextBoolean()) { column.setDefaultValue(Json.parse(readText(in))); }
+            }
+            if (version >= 6) {
+                String sql = readOptionalText(in);
+                if (sql != null) { column.setDefaultExpression(sql); }
             }
             table.addColumn(column);
         }
@@ -173,6 +188,15 @@ public class Catalog {
             for(int i=0;i<keyCount;i++) { uniqueKeys.add(readNames(in)); }
         }
         table.setUniqueKeys(uniqueKeys);
+        List<SchemaConstraint> constraints = new ArrayList<>();
+        if (version >= 6) {
+            int size = in.readNextInt();
+            for (int i = 0; i < size; i++) {
+                constraints.add(new SchemaConstraint(readOptionalText(in), readText(in), readNames(in),
+                        readOptionalText(in), readOptionalText(in)));
+            }
+        }
+        table.setConstraints(constraints);
         table.setChecks(checks);
         table.setForeignKeys(foreignKeys);
         table.setStringCharset(table.getRowFormat() == 0 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
@@ -192,6 +216,11 @@ public class Catalog {
     private static String readText(RowInput in) {
         return in.readNextString(in.readNextInt(), StandardCharsets.UTF_8);
     }
+    private static void writeOptionalText(RowOutput out, String value) throws IOException {
+        out.writeBoolean(value != null);
+        if (value != null) { writeText(out, value); }
+    }
+    private static String readOptionalText(RowInput in) { return in.readNextBoolean() ? readText(in) : null; }
     private static void writeNames(RowOutput out,List<String> names) throws IOException {
         out.writeInt(names.size());
         for(String name:names) { writeText(out,name); }

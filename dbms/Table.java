@@ -19,6 +19,7 @@ public class Table {
     private boolean qualifiedOnly;
     private List<List<String>> uniqueKeys = List.of();
     private List<String> primaryKeyNames=List.of();
+    private List<SchemaConstraint> constraints = List.of();
 
     public Table(String name) { this.name = name; }
 
@@ -49,6 +50,7 @@ public class Table {
             foreignKeys = cached.foreignKeys;
             uniqueKeys = cached.uniqueKeys;
             primaryKeyNames = cached.primaryKeyNames;
+            constraints = cached.constraints;
             columns = new ArrayList<>();
             for (Column source : cached.columns) {
                 Column copy = new Column(source.getName(), this);
@@ -104,6 +106,8 @@ public class Table {
     public void setChecks(List<String> values) { checks = List.copyOf(values); }
     public List<ForeignKey> getForeignKeys() { return foreignKeys; }
     public void setForeignKeys(List<ForeignKey> values) { foreignKeys = List.copyOf(values); }
+    public List<SchemaConstraint> getConstraints() { return constraints; }
+    public void setConstraints(List<SchemaConstraint> values) { constraints = List.copyOf(values); }
     void setQualifiedOnly(boolean value) { qualifiedOnly = value; }
     List<List<String>> getUniqueKeys() { return uniqueKeys; }
     void setUniqueKeys(List<List<String>> keys) {

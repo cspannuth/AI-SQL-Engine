@@ -36,8 +36,8 @@ public final class ConstraintTests {
             fails(() -> DBMS.execute("DROP TABLE parent;"));
 
             for (String sql : List.of(
-                    "CREATE TABLE bad(value INTEGER DEFAULT (1+2));",
-                    "CREATE TABLE bad(value INTEGER DEFAULT CURRENT_TIMESTAMP);",
+                    "CREATE TABLE bad(value INTEGER DEFAULT (missing+2));",
+                    "CREATE TABLE bad(value TEXT DEFAULT (SELECT 1));",
                     "CREATE TABLE bad(value INTEGER CHECK(missing>0));",
                     "CREATE TABLE bad(value INTEGER CHECK(SUM(value)>0));",
                     "CREATE TABLE bad(value INTEGER PRIMARY KEY,PRIMARY KEY(value));",

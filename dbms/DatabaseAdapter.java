@@ -73,10 +73,10 @@ public final class DatabaseAdapter implements AutoCloseable {
     }
 
     public record ColumnSchema(String name, String type, int byteLength, boolean nullable, boolean primaryKey,
-            boolean unique, boolean hasDefault, Object defaultValue) { }
+            boolean unique, boolean hasDefault, Object defaultValue, String defaultSql) { }
     public record TableSchema(String name, List<ColumnSchema> columns, boolean rowIdTable, String rowIdColumn,
             List<String> checks, List<ForeignKey> foreignKeys, List<IndexDefinition> indexes,
-            List<String> primaryKeyColumns,List<List<String>> uniqueKeys) {
+            List<String> primaryKeyColumns,List<List<String>> uniqueKeys, List<SchemaConstraint> constraints) {
         public TableSchema {
             columns = List.copyOf(columns);
             checks = List.copyOf(checks);
@@ -84,6 +84,7 @@ public final class DatabaseAdapter implements AutoCloseable {
             indexes = List.copyOf(indexes);
             primaryKeyColumns=List.copyOf(primaryKeyColumns);
             uniqueKeys=uniqueKeys.stream().map(List::copyOf).toList();
+            constraints = List.copyOf(constraints);
         }
     }
     public record ResultColumn(String name, SqlType type) { }
@@ -155,6 +156,7 @@ public final class DatabaseAdapter implements AutoCloseable {
                         "persistent equality indexes and EXPLAIN QUERY PLAN",
                         "rowid tables for new schemas", "row/byte previews", "scan/working-data budgets",
                         "DEFAULT/CHECK/composite-key/reference-action/index metadata",
+                        "expression/time default SQL and named declaration metadata",
                         "cooperative deadline", "result retrieval"),
                 List.of("read-only adapter", "one serialized session", "no recursive CTEs or window functions",
                         "no persistent result history", "no snapshot version or multi-user authentication",
@@ -191,13 +193,13 @@ public final class DatabaseAdapter implements AutoCloseable {
                         || i == table.getRowIdColumn();
                 columns.add(new ColumnSchema(column.getName(), types[column.getType()], column.getLength(),
                         !column.isNotNull() && !keyNotNull, column.isPrimaryKey(), column.isUnique(),
-                        column.hasDefault(), column.getDefaultValue()));
+                        column.hasDefault(), column.getDefaultValue(), column.getDefaultSql()));
             }
             String rowIdColumn = table.getRowIdColumn() < 0 ? null
                     : table.getColumn(table.getRowIdColumn()).getName();
             return new TableSchema(table.getName(), columns, table.usesRowIds(), rowIdColumn,
                     table.getChecks(), table.getForeignKeys(), IndexCatalog.forTable(table.getName()),
-                    table.getPrimaryKeyColumns(),table.getUniqueKeys());
+                    table.getPrimaryKeyColumns(),table.getUniqueKeys(),table.getConstraints());
         });
     }
 

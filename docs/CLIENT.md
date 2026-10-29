@@ -111,6 +111,9 @@ rules. See [row identity](ROW_IDENTITY.md) before querying hidden IDs.
 Column metadata also includes UNIQUE and default declarations, and table metadata
 includes CHECK SQL and foreign-key descriptors. See [constraints](CONSTRAINTS.md)
 for field meanings and supported behavior.
+`defaultSql` exposes expression/time defaults without evaluating them, and
+`constraints` preserves declaration names and inline/table scope. These are also
+available in schema-only sessions.
 Schema results also expose ordered primary/composite UNIQUE keys and explicit
 indexes. Read operations accept WITH/subqueries/compounds and EXPLAIN QUERY PLAN
 under the same nested table policy. RETURNING does not make a write read-only.

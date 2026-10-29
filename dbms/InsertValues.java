@@ -6,8 +6,10 @@ final class InsertValues {
     static Input evaluate(Table table,List<Column> targets,List<Object> input) {
         if(input.size()!=targets.size()) { throw new IllegalArgumentException("Value count does not match INSERT columns"); }
         Object[] values=new Object[table.numColumns()];
+        Set<Integer> supplied = new HashSet<>();
+        for (Column target : targets) { supplied.add(target.getIndex()); }
         for(int i=0;i<values.length;i++) {
-            if(i!=table.getRowIdColumn()) { values[i]=table.getColumn(i).getDefaultValue(); }
+            if(i!=table.getRowIdColumn() && !supplied.contains(i)) { values[i]=table.getColumn(i).evaluateDefault(); }
         }
         Object rowId=null;
         for(int i=0;i<input.size();i++) {

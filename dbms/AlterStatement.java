@@ -49,6 +49,12 @@ public final class AlterStatement extends SQLStatement {
                         newName, renameTable) : check);
             }
             edited.setChecks(checks);
+            List<SchemaConstraint> constraints = new ArrayList<>();
+            for (SchemaConstraint constraint : source.getConstraints()) {
+                constraints.add(own ? constraint.renamed(renameTable ? source.getName() : oldColumn,
+                        newName, renameTable) : constraint);
+            }
+            edited.setConstraints(constraints);
             if(own && !renameTable) {
                 edited.setPrimaryKeyColumns(renameNames(source.getPrimaryKeyColumns(),oldColumn,newName));
                 List<List<String>> keys=new ArrayList<>();
@@ -81,6 +87,11 @@ public final class AlterStatement extends SQLStatement {
 
     private void addColumn(Table original) {
         Column definition = addition.columns.get(0);
+        if (!definition.hasLiteralDefault()) {
+            try (TableIterator iterator = new TableIterator(original)) {
+                if (iterator.next()) { throw new IllegalArgumentException("Cannot add a non-constant default to existing rows"); }
+            }
+        }
         if (definition.getTable() != null) { throw new IllegalArgumentException("Added columns cannot be qualified"); }
         if (hasColumn(original, definition.getName())) {
             throw new IllegalArgumentException("Column already exists: " + definition.getName());
@@ -88,10 +99,10 @@ public final class AlterStatement extends SQLStatement {
         if (definition.isPrimaryKey() || definition.isUnique()) {
             throw new IllegalArgumentException("ADD COLUMN cannot add PRIMARY KEY or UNIQUE");
         }
-        if (definition.isNotNull() && definition.getDefaultValue() == null) {
+        if (definition.hasLiteralDefault() && definition.isNotNull() && definition.evaluateDefault() == null) {
             throw new IllegalArgumentException("A NOT NULL added column needs a non-null default");
         }
-        if (!addition.foreignKeys.isEmpty() && definition.getDefaultValue() != null) {
+        if (!addition.foreignKeys.isEmpty() && definition.evaluateDefault() != null) {
             throw new IllegalArgumentException("An added REFERENCES column must default to NULL");
         }
         Table edited = copy(original, original.getName());
@@ -105,6 +116,9 @@ public final class AlterStatement extends SQLStatement {
         List<ForeignKey> references = new ArrayList<>(edited.getForeignKeys());
         references.addAll(addition.foreignKeys);
         edited.setForeignKeys(references);
+        List<SchemaConstraint> constraints = new ArrayList<>(edited.getConstraints());
+        constraints.addAll(addition.constraints);
+        edited.setConstraints(constraints);
         edited.setDB(original.getDB());
         ConstraintValidator.validateDefinition(edited);
         byte[] metadata = Catalog.encodeMetadata(edited);
@@ -113,7 +127,7 @@ public final class AlterStatement extends SQLStatement {
         try (TableIterator iterator = new TableIterator(original)) {
             while (iterator.next()) {
                 Object[] values = Arrays.copyOf(iterator.getRow(), edited.numColumns());
-                values[column.getIndex()] = column.adjustValue(column.getDefaultValue());
+                values[column.getIndex()] = column.adjustValue(column.evaluateDefault());
                 Long rowId = edited.usesRowIds() ? RowIdentity.value(new DatabaseEntry(iterator.getKey())) : null;
                 InsertRow record = new InsertRow(edited, values, rowId);
                 record.marshall();
@@ -142,9 +156,9 @@ public final class AlterStatement extends SQLStatement {
         return edited;
     }
 
-    private static Table copy(Table source, String name) {
+    static Table copy(Table source, String name) {
         Table copy = new Table(name);
-        copy.setStorageVersion(5);
+        copy.setStorageVersion(6);
         copy.setRowFormat(source.getRowFormat());
         copy.setStringCharset(source.getStringCharset());
         copy.setRowIdColumn(source.getRowIdColumn());
@@ -157,6 +171,7 @@ public final class AlterStatement extends SQLStatement {
         copy.setForeignKeys(source.getForeignKeys());
         copy.setPrimaryKeyColumns(source.getPrimaryKeyColumns());
         copy.setUniqueKeys(source.getUniqueKeys());
+        copy.setConstraints(source.getConstraints());
         return copy;
     }
 

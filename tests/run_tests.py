@@ -18,6 +18,7 @@ from rowid_checks import check_rowids
 from constraint_checks import check_constraints
 from stage_checks import check_stages
 from reliability_checks import check_reliability
+from schema_checks import check_schema
 
 
 def database_hashes():
@@ -255,6 +256,7 @@ def main():
             check_rowids(classpath, workspace / "rowids", run_engine)
             check_constraints(classpath, workspace / "constraints", run_engine)
             check_stages(classpath,workspace / "stages",run_engine)
+            check_schema(classpath, workspace / "schema", run_engine)
             crash_recovery(classpath, workspace / "recovery")
             check_reliability(classpath, workspace / "reliability", run_engine)
             cli_checks(classpath, workspace / "cli")

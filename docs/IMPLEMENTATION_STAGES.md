@@ -20,7 +20,8 @@ blocked changes, defaults, references, hidden-name shadowing, and original-forma
 data. Added CHECK validation has its own regression because Python's bundled
 SQLite 3.35 predates SQLite 3.37's existing-row validation for added CHECKs.
 
-DROP COLUMN and changing arbitrary column types/constraints remain unsupported.
+DROP COLUMN was left to the follow-up [schema work](SCHEMA_CHANGES.md), now
+implemented. Changing arbitrary column types/constraints remains unsupported.
 
 ## 2. Indexes and access paths — verified
 
@@ -129,3 +130,13 @@ The later reliability step adds 1,248 generated SQLite comparisons, six recovery
 scenarios with 151 reference statements, and a 4,096-row fixture with 31 assertions.
 These run in the default suite alongside the original 873 comparisons. See
 [VALIDATION.md](VALIDATION.md) for coverage and reproduction instructions.
+
+## Follow-up schema improvements
+
+Implemented expression/UTC time defaults, named declarations, and dependency-checked
+DROP COLUMN. Each feature passed its compilation and cumulative schema gate before
+the next was implemented. Current gates compare 60 default, 41 named-constraint,
+and 89 column-removal statements with SQLite across JVM restarts. Additional API
+checks cover metadata and golden version 0-5 keys/encodings. Two forced-termination
+scenarios compare 33 reference statements around committed/pending schema rewrites
+and inspect restored index plans. See [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md).

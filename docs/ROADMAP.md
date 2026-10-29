@@ -18,9 +18,10 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 ### Implemented core
 
 - CREATE/DROP TABLE with atomic catalog updates and IF [NOT] EXISTS.
-- Literal defaults and INSERT DEFAULT VALUES; single/composite UNIQUE and primary
+- Literal/expression/time defaults and INSERT DEFAULT VALUES; named constraints,
+  single/composite UNIQUE and primary
   keys, CHECK, immediate/deferred foreign keys, and referential actions. New
-  metadata persists in catalog version 5 while earlier row formats remain
+  metadata persists in catalog version 6 while earlier row formats remain
   writable. See [CONSTRAINTS.md](CONSTRAINTS.md) for supported forms and limits.
 - INSERT with column lists and multiple VALUES rows.
 - INSERT SELECT, one-clause UPSERT, RETURNING, WITH-prefixed writes, and savepoints.
@@ -32,7 +33,7 @@ differences live in [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md).
 - COUNT, SUM, AVG, TOTAL, MIN, MAX, and DISTINCT aggregate arguments.
 - Arithmetic, concatenation, comparisons, scalar boolean expressions, IN,
   BETWEEN, LIKE, and SQL three-valued null logic.
-- ALTER additions/renames; persistent single-column indexes and equality plans;
+- ALTER additions/renames/column removal; persistent single-column indexes and equality plans;
   subqueries, derived tables, ordinary CTEs and compounds; CASE, CAST, and scalar
   null/text/numeric/UTC date functions.
 - Case-insensitive identifiers, underscores, quoted identifiers, escaped strings,
@@ -58,10 +59,14 @@ ordinary CTEs and compounds; CASE/CAST and scalar functions; query inserts,
 UPSERT and RETURNING; composite keys, referential actions/deferral, and savepoints.
 See [IMPLEMENTATION_STAGES.md](IMPLEMENTATION_STAGES.md) for achievements and
 [SQL_FEATURES.md](SQL_FEATURES.md) for examples and boundaries.
+The follow-up schema improvements are also implemented: expression/UTC time
+defaults, named declarations, and dependency-checked DROP COLUMN, with restart,
+old-format, and recovery tests. See [SCHEMA_CHANGES.md](SCHEMA_CHANGES.md).
 
-1. **Schema/type parity.** Complete SQLite affinity/formatting, expression/time
-   defaults, named constraints, DROP COLUMN, arbitrary schema changes, and optional
-   row-format migration. Preserve existing files and test every format transition.
+1. **Schema/type parity.** Complete SQLite affinity/formatting, arbitrary schema
+   changes, and optional row-format migration. Older catalogs without declaration
+   ownership retain conservative DROP restrictions. Preserve existing files and
+   test every format transition.
 2. **Query breadth.** Recursive CTEs, window functions, broader join syntax, views,
    triggers, named parameters, additional functions/operators, and collations.
 3. **Write parity.** Multiple conflict clauses, OR REPLACE/IGNORE, broader RETURNING,

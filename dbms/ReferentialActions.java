@@ -85,7 +85,7 @@ final class ReferentialActions {
                 Long rowId=child.table.usesRowIds() ? RowIdentity.value(row.keyEntry()) : null;
                 for(int i=0;i<sources.size();i++) {
                     Column column=sources.get(i);
-                    Object value=action.equals("SET NULL") ? null : action.equals("SET DEFAULT") ? column.getDefaultValue()
+                    Object value=action.equals("SET NULL") ? null : action.equals("SET DEFAULT") ? column.evaluateDefault()
                             : event.after().getColumnValue(parents.get(i).getIndex());
                     if(column.getIndex()==child.table.getRowIdColumn()) {
                         rowId=RowIdentity.integer(value); values[column.getIndex()]=rowId;

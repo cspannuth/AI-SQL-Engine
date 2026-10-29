@@ -92,9 +92,12 @@ final class IndexCatalog {
         }
     }
     static void rebuild() {
+        rebuild(all());
+    }
+    static void rebuild(List<IndexDefinition> indexes) {
         rebuilding=true;
         try {
-            for(IndexDefinition index:all()) {
+            for(IndexDefinition index:indexes) {
                 Table table=new Table(index.table()); table.open(); attach(table,index,true);
             }
         } finally { Table.cacheClose(); Table.cacheInit(); rebuilding=false; }

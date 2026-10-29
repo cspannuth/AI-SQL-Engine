@@ -98,6 +98,7 @@ for row ID projections even when no rows match.
 | Version 2 | UTF-8 | 64 bits | Internal row ID |
 | Version 3 | UTF-8 | 64 bits | Internal row ID; persisted defaults and constraints |
 | Versions 4/5 | Preserved row encoding | Preserved widths | Explicit row-format marker; new tables use internal row IDs |
+| Version 6 | Preserved row encoding | Preserved widths | Default SQL and named declarations do not change physical keys |
 
 Version 2 catalog records start with a zero marker, version byte, column-count
 byte, and signed-short row ID column index (`-1` if there is no alias). The
@@ -111,12 +112,15 @@ keeping the same physical row representation.
 Version 4 adds a row-format byte independently of the schema version. Version 5
 adds ordered/composite keys and foreign-key actions/deferral. ALTER upgrades the
 schema descriptor while retaining the table's row-format byte and stored widths.
+Version 6 adds optional default SQL per column and declaration names/scope per
+table. DROP COLUMN re-encodes remaining offsets and rebuilds surviving indexes,
+preserving all physical keys, encodings, and integer widths.
 
 Opening an old database never migrates or rewrites its schemas. Original and
 version 1 tables keep their declared or implicit first-column primary key, require
 explicit non-null keys, and do not expose hidden row IDs. Version 2 tables retain
 their row IDs without acquiring new constraints. All formats can coexist in the
-same database. ALTER additions/renames are explicit schema changes; automatic
+same database. ALTER additions/renames/removal are explicit schema changes; automatic
 conversion of legacy physical keys to row IDs remains unsupported.
 
 `python tests/run_tests.py` verifies SQLite comparisons, signed key boundaries,
