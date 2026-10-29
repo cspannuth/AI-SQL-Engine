@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "tables": {
+    "sales": {
+      "description": "Example order sales; use only with a matching actual schema.",
+      "aliases": ["orders"],
+      "grain": "one row per order",
+      "columns": {
+        "category": {"description": "Product category"},
+        "amount": {"description": "Order sales amount", "unit": "USD"}
+      }
+    }
+  },
+  "metrics": {
+    "revenue": {
+      "description": "Example sum of recorded order amounts; assumes refunds are already reflected.",
+      "expression": "SUM(sales.amount)",
+      "tables": ["sales"],
+      "aliases": ["total sales"],
+      "unit": "USD",
+      "grain": "sum over matching orders",
+      "timezone": "UTC"
+    }
+  }
+}

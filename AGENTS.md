@@ -59,6 +59,15 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
   See [docs/VALIDATION.md](docs/VALIDATION.md) for reproduction and limits.
 - `tests/schema_checks.py`: cumulative defaults/names/DROP gates, older-format
   fixtures, and forced termination around committed/pending schema rewrites.
+- `sql_agent/`: Python process client, context selection, hosted/local model
+  connection, bounded role orchestration, and terminal/JSON tools. The model
+  provider remains outside Java; SQL drafting never receives result rows.
+- `.env.example`: key-name template. The application loads ignored `.env` for
+  model-backed commands; process environment variables take precedence.
+- `.agents/skills/sql-analysis`, `.agents/skills/result-explanation`: role workflows
+  loaded explicitly by the application; they do not enforce permissions.
+- `tests/agent_checks.py`, `tests/evaluate_agent.py`: offline integration checks
+  and isolated/shared-context evaluations; live model calls require `--live`.
 
 CRUD and explicit transactions are implemented, including atomic catalog changes.
 SELECT supports projections, aliases, DISTINCT, joins, grouping, common aggregates,
@@ -110,6 +119,7 @@ python tests/run_tests.py
 python tests/stage_checks.py --through savepoints
 python tests/reliability_checks.py --seed 42
 python tests/schema_checks.py --through drop
+python tests/agent_checks.py
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`
@@ -121,8 +131,9 @@ and double-quoted identifiers are supported.
 
 Keep the flow explicit: user question -> schema and metric context -> proposed
 SQL -> application policy and semantic validation -> DBMS -> typed result ->
-answer and optional chart. The local database adapter is implemented; model and
-network integrations remain planned. See [docs/ADAPTER.md](docs/ADAPTER.md).
+answer and optional chart. The local adapter and first model-backed Python
+application are implemented. See [docs/SQL_AGENT.md](docs/SQL_AGENT.md) and
+[docs/ADAPTER.md](docs/ADAPTER.md). Rendering remains planned.
 The process interface is documented in [docs/CLIENT.md](docs/CLIENT.md). Preserve
 schema-only operation restrictions so a drafting agent can receive metadata
 without table rows. SQL execution remains an explicit deterministic request.
@@ -166,8 +177,9 @@ capability; it does not require a separate agent process.
   and calculations, select a suitable chart, and return an artifact with provenance.
   Request a new query through the SQL tool when more data is needed.
 
-Begin with one orchestrator using these capabilities. Introduce separate agents
-only when evaluation demonstrates a benefit. Never invent query output, chart
+The application uses one deterministic orchestrator and separate model contexts
+for drafting/explanation, as requested. Measure token use, latency, and correctness
+against the shared-context baseline; do not assume a benefit. Never invent query output, chart
 data, or database capabilities to complete a workflow.
 
 ## Analytics and writes

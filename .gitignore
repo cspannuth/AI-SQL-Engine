@@ -4,6 +4,9 @@ dbms/db
 __pycache__/
 .local-db/
 /db/
+/artifacts/
+/config/agent.local.json
+/config/dictionary.local.json
 
 # Compiled output and generator backups
 *.class

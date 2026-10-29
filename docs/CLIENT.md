@@ -191,3 +191,7 @@ generation, and table discovery does not fetch table contents.
 
 Run `python tests/run_tests.py` for codec/protocol, terminal, session, permissions,
 parameter, truncation, Unicode, and error-recovery checks alongside engine tests.
+
+The Python [SQL application](SQL_AGENT.md) now owns a persistent instance of this
+process, keeps model roles separate, and routes proposed queries through the same
+read-only policy. It does not change this Java protocol or its permissions.

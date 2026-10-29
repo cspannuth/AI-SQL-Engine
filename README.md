@@ -129,3 +129,22 @@ and configurable ceilings, or the [adapter API guide](docs/ADAPTER.md) for Java
 usage. Results use the adapter's normal limits, without a fixed sample-row query.
 Artifacts remain available within a session until expiry or eviction and disappear
 when it closes. The engine remains read-only through this interface.
+
+## Ask database questions
+
+The Python application uses separate SQL-drafting and result-explanation contexts
+with the deterministic read-only client. Small results are formatted directly to
+avoid an extra model call. No additional Python packages are required.
+
+```powershell
+python scripts/build.py
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+python -m sql_agent ask --db ".local-db" --config config/agent.example.json
+```
+
+Edit `.env` and set `OPENAI_API_KEY` to your API key. The file is
+ignored by Git; an existing shell environment variable takes precedence.
+Use your actual schema and maintain metric definitions for business questions.
+The hosted model remains configurable. See [SQL_AGENT.md](docs/SQL_AGENT.md) for
+setup, skills, table policies, JSON tools, artifacts, and offline/live evaluations.
+Visualization handoffs are available; chart rendering is the next milestone.

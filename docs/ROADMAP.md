@@ -5,8 +5,8 @@
 Complete the Java DBMS as the first milestone, aiming for SQLite compatibility.
 Keep the existing Berkeley DB backend, table/column schema, and statement classes.
 Favor readable methods and small supporting classes over a new framework.
-A local read-only adapter foundation is now available alongside that engine work.
-AI skills and the visualization application remain later milestones.
+A local read-only adapter and first SQL question-answering application are now
+available alongside that engine work. Chart rendering remains a later milestone.
 
 The engine now implements the previously missing execution paths and a broader
 query dialect. This establishes a working core; full SQLite compatibility still
@@ -125,7 +125,19 @@ truncation, execution limits, and database-directory isolation without a model.
 
 ## 3. Add SQL question answering
 
-Create a SQL analysis skill against the actual adapter contracts. Supply live
+The first application is implemented under `sql_agent/`: a persistent Python
+client, compact schema/metric context, isolated drafting/explanation model calls,
+bounded repairs, direct formatting, executable tools, and result/visualization
+handoffs. Hosted access is configurable; the example uses a low-cost hosted model
+and loads its key from an ignored `.env` file.
+See [SQL_AGENT.md](SQL_AGENT.md).
+
+Offline integration checks and a shared-context comparison harness are available.
+Next, run the curated cases with a real hosted model, review SQL and explanations,
+measure provider-reported tokens/latency, and refine metric definitions and prompts.
+Scripted tests do not establish those results.
+
+The SQL analysis and result-explanation skills follow actual adapter contracts. Supply live
 schema/capability metadata and a maintained data dictionary: units, metric
 definitions, grouping grain, relationships, and known limitations.
 
@@ -168,5 +180,6 @@ render successfully, and empty/incomplete datasets are handled explicitly.
 A synthetic sales analytics workbench is a useful first application. Start with
 known fixtures and explicit metric definitions, then support questions, visible
 SQL, answers, charts, and follow-up analysis. Begin with one orchestrator using
-SQL and visualization skills; introduce separate agent processes when measured
-quality or workflow isolation warrants them.
+isolated SQL-drafting/explanation contexts and visualization skills. Introduce
+separate operating-system agent processes when measured quality or isolation
+warrants them.

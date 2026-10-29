@@ -19,6 +19,7 @@ from constraint_checks import check_constraints
 from stage_checks import check_stages
 from reliability_checks import check_reliability
 from schema_checks import check_schema
+from agent_checks import check_agent
 
 
 def database_hashes():
@@ -260,6 +261,7 @@ def main():
             crash_recovery(classpath, workspace / "recovery")
             check_reliability(classpath, workspace / "reliability", run_engine)
             cli_checks(classpath, workspace / "cli")
+            check_agent(classpath, workspace / "agent", workspace, run_engine)
     finally:
         if database_hashes() != before:
             raise AssertionError("Existing dbms/db files changed during verification")

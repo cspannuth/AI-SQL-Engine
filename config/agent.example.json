@@ -1,0 +1,32 @@
+{
+  "model": {
+    "model": "gpt-6-luna",
+    "base_url": "https://api.openai.com/v1",
+    "api_key_env": "OPENAI_API_KEY",
+    "response_format": "json_schema",
+    "token_limit_field": "max_completion_tokens",
+    "max_output_tokens": 900,
+    "reasoning_effort": "none",
+    "timeout": 45
+  },
+  "database": {
+    "caller": "sql-analysis",
+    "limits": {
+      "maxRows": 200,
+      "maxResultBytes": 262144,
+      "maxScannedRows": 100000,
+      "maxWorkingRows": 10000,
+      "maxWorkingBytes": 16777216,
+      "timeoutMillis": 5000
+    }
+  },
+  "workflow": {
+    "max_model_calls": 6,
+    "sql_repairs": 2,
+    "schema_requests": 2,
+    "max_tables": 6,
+    "context_bytes": 24000,
+    "answer_bytes": 12000,
+    "question_bytes": 4000
+  }
+}
