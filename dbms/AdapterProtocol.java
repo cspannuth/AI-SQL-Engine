@@ -1,7 +1,7 @@
 import java.util.*;
 
 /** Versioned JSON-friendly operations shared by the terminal and process client. */
-public final class AdapterProtocol {
+public final class AdapterProtocol implements ClientProtocol {
     private static final List<String> OPERATIONS = List.of(
             "get_capabilities", "list_tables", "describe_table", "query_readonly", "get_result", "close");
     private final DatabaseAdapter adapter;

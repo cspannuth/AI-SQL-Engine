@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>AI SQL Engine · Workspace</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 4 16 4 16 0V5M4 12v7c0 4 16 4 16 0v-7"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Zm7 0v4m-2-2h4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M5 15a8 8 0 0 0 13 3"/></symbol>
+  </svg>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#sql" aria-label="AI SQL Engine home">
+        <span class="brand-mark"><svg><use href="#i-database"/></svg></span>
+        <span>AI SQL Engine<small>Database workspace</small></span>
+      </a>
+      <div class="nav-label">WORKSPACE</div>
+      <nav aria-label="Workspace sections">
+        <button class="nav-item active" data-page="sql"><svg><use href="#i-code"/></svg>SQL console<span class="nav-shortcut">SQL</span></button>
+        <button class="nav-item" data-page="database"><svg><use href="#i-database"/></svg>Database explorer</button>
+        <button class="nav-item" data-page="ask"><svg><use href="#i-spark"/></svg>Ask AI</button>
+        <button class="nav-item" data-page="activity"><svg><use href="#i-clock"/></svg>Activity</button>
+        <button class="nav-item" data-page="settings"><svg><use href="#i-settings"/></svg>Settings</button>
+      </nav>
+      <div class="sidebar-note"><span class="tiny-label">YOUR DATA. YOUR ENGINE.</span><p>Explore with SQL.<br>Ask in your own words.</p></div>
+      <div class="connection-card"><span id="connection-dot" class="status-dot"></span><div><strong id="database-name">Connecting…</strong><small id="connection-label">Local database</small></div><span class="local-label">LOCAL</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb-current">SQL console</strong></div>
+        <div class="topbar-actions"><span id="transaction-badge" class="badge neutral">Auto-commit</span><button id="model-badge" class="badge neutral">Model setup</button></div>
+      </header>
+      <div class="content">
+        <div id="global-notice" class="notice error hidden" role="alert"></div>
+        <section id="page-sql" class="page">
+          <div class="page-heading"><div><p class="eyebrow">DIRECT DATABASE ACCESS</p><h1>SQL console</h1><p>Write a statement. Inspect the result. Understand the plan.</p></div><span class="subtle-label"><span class="status-dot"></span> Local execution</span></div>
+          <div class="panel editor-panel">
+            <div class="panel-toolbar"><div class="toolbar-title"><svg><use href="#i-code"/></svg><strong>Query editor</strong><span class="badge neutral">SQL</span></div><div class="button-row"><kbd>Ctrl / ⌘ + Enter</kbd><button id="explain-button" class="button secondary action">Explain plan</button><button id="run-button" class="button primary action"><svg><use href="#i-play"/></svg>Run statement</button></div></div>
+            <div class="editor"><div id="line-numbers" class="line-numbers" aria-hidden="true">1</div><textarea id="sql-input" aria-label="SQL statement" spellcheck="false" wrap="off">-- Run one statement, or select a statement to execute.
+SELECT 1 AS ready;</textarea></div>
+            <div class="editor-footer"><span>Java DBMS <span class="separator">·</span> One statement per run</span><span id="editor-position">Ln 2, Col 19</span></div>
+            <details class="parameters"><summary>Bound parameters <span>Optional JSON array for ? placeholders</span></summary><label for="parameters-input" class="sr-only">SQL parameters as a JSON array</label><textarea id="parameters-input" rows="2" spellcheck="false">[]</textarea></details>
+          </div>
+          <div class="transaction-bar"><span id="transaction-description">Statements commit automatically.</span><div class="button-row"><button id="begin-button" class="button small secondary action">Begin transaction</button><button id="commit-button" class="button small secondary action" disabled>Commit</button><button id="rollback-button" class="button small secondary action" disabled>Roll back</button></div></div>
+          <div id="sql-result" class="result-host"></div>
+        </section>
+
+        <section id="page-database" class="page hidden">
+          <div class="page-heading"><div><p class="eyebrow">KNOW YOUR DATA</p><h1>Database explorer</h1><p>Discover tables, relationships, constraints, and indexes.</p></div><button id="refresh-tables" class="button secondary action"><svg><use href="#i-refresh"/></svg>Refresh schema</button></div>
+          <div class="explorer-layout"><div class="panel table-sidebar"><div class="table-sidebar-heading"><strong>Tables</strong><span id="table-count" class="badge neutral">0</span></div><label for="table-search" class="sr-only">Find a table</label><input id="table-search" placeholder="Find a table…" type="search"><div id="table-list" class="table-list"></div></div><div id="schema-detail"></div></div>
+        </section>
+
+        <section id="page-ask" class="page hidden">
+          <div class="page-heading"><div><p class="eyebrow">FROM QUESTION TO EVIDENCE</p><h1>Ask your database</h1><p>AI drafts the SQL. Your DBMS returns the facts.</p></div><button id="clear-conversation" class="button secondary action">New conversation</button></div>
+          <div id="ai-notice" class="notice hidden"></div>
+          <div id="conversation" class="conversation">
+            <div id="ask-welcome" class="ask-welcome"><span class="welcome-mark"><svg><use href="#i-spark"/></svg></span><h2>What would you like to find out?</h2><p>Ask about the tables in your database.<br>You’ll see the answer and the SQL behind it.</p><div id="question-suggestions" class="suggestions"></div></div>
+          </div>
+          <form id="question-form" class="panel question-composer"><label for="question-input" class="sr-only">Ask a question about your database</label><textarea id="question-input" placeholder="Ask a question about your data…" rows="2" maxlength="4000"></textarea><div class="composer-footer"><label>Answer style <select id="answer-mode"><option value="auto">Automatic</option><option value="direct">Direct results</option><option value="model">AI explanation</option></select></label><button id="ask-button" class="button primary action" type="submit"><svg><use href="#i-spark"/></svg>Ask question</button></div></form>
+          <p class="footnote">AI uses read-only SQL. Each question can make model API calls; usage is shown with the answer.</p>
+        </section>
+
+        <section id="page-activity" class="page hidden">
+          <div class="page-heading"><div><p class="eyebrow">YOUR WORK, IN CONTEXT</p><h1>Activity</h1><p>Recent console statements, query plans, and AI questions in this session.</p></div><button id="refresh-history" class="button secondary action"><svg><use href="#i-refresh"/></svg>Refresh</button></div><div id="history-list"></div>
+        </section>
+
+        <section id="page-settings" class="page hidden">
+          <div class="page-heading"><div><p class="eyebrow">WORKSPACE CONFIGURATION</p><h1>Settings</h1><p>Your active connection, model, and execution limits.</p></div></div>
+          <div id="settings-content" class="settings-grid"></div>
+          <div class="notice">Choose the database with <code>--db</code> and settings with <code>--config</code> at startup. API keys stay in the server’s <code>.env</code>. Restart the workspace after configuration changes.</div>
+        </section>
+        <footer class="workspace-footer"><span>AI SQL Engine <span class="separator">/</span> Local workspace</span><span id="workspace-state" aria-live="polite">Connecting to the engine…</span></footer>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

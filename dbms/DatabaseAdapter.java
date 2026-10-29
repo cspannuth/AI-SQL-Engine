@@ -133,6 +133,16 @@ public final class DatabaseAdapter implements AutoCloseable {
 
     // Clock injection makes expiry tests deterministic without sleeps.
     DatabaseAdapter(Path home, AccessPolicy policy, QueryLimits limits, Retention retention, Clock clock) {
+        this(home, policy, limits, retention, clock, false);
+    }
+
+    /** The trusted workspace opts into writable startup; ordinary adapter opens remain read-only. */
+    static DatabaseAdapter openWorkspace(Path home, QueryLimits limits, Retention retention) {
+        return new DatabaseAdapter(home, AccessPolicy.readAll("local-workspace"), limits, retention, Clock.systemUTC(), true);
+    }
+
+    private DatabaseAdapter(Path home, AccessPolicy policy, QueryLimits limits, Retention retention, Clock clock,
+            boolean workspace) {
         this.policy = Objects.requireNonNull(policy);
         maximumLimits = Objects.requireNonNull(limits);
         this.retention = Objects.requireNonNull(retention);
@@ -141,7 +151,7 @@ public final class DatabaseAdapter implements AutoCloseable {
             if (DBMS.getEnv() != null) {
                 throw error(ErrorCode.INVALID_REQUEST, "Another database session is already open", null, null);
             }
-            try { DBMS.init(Objects.requireNonNull(home), false); }
+            try { DBMS.init(Objects.requireNonNull(home), workspace); }
             catch (RuntimeException e) { throw error(ErrorCode.DATABASE_ERROR, "Could not open the database", null, e); }
             environment = DBMS.getEnv();
         }
@@ -251,7 +261,7 @@ public final class DatabaseAdapter implements AutoCloseable {
         if (!policy.permits(table)) { throw error(ErrorCode.ACCESS_DENIED, "Table access is not allowed", null, null); }
     }
 
-    private List<Object> validateRequest(String sql, List<?> parameters) {
+    List<Object> validateRequest(String sql, List<?> parameters) {
         if (sql == null || sql.isBlank() || parameters == null || parameters.size() > MAX_PARAMETERS) {
             throw error(ErrorCode.INVALID_REQUEST, "SQL and at most " + MAX_PARAMETERS + " parameters are required", null, null);
         }

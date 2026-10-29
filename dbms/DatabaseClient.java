@@ -30,11 +30,14 @@ public final class DatabaseClient {
             DatabaseAdapter.AccessPolicy policy = options.tables.isEmpty()
                     ? DatabaseAdapter.AccessPolicy.readAll(options.caller)
                     : DatabaseAdapter.AccessPolicy.readTables(options.caller, options.tables);
-            try (DatabaseAdapter adapter = DatabaseAdapter.open(options.home, policy, options.limits(), options.retention())) {
-                AdapterProtocol protocol = new AdapterProtocol(adapter, options.limits(), options.schemaOnly);
+            try (DatabaseAdapter adapter = options.workspace
+                    ? DatabaseAdapter.openWorkspace(options.home, options.limits(), options.retention())
+                    : DatabaseAdapter.open(options.home, policy, options.limits(), options.retention())) {
+                AdapterProtocol readProtocol = new AdapterProtocol(adapter, options.limits(), options.schemaOnly);
+                ClientProtocol protocol = options.workspace ? new WorkspaceProtocol(adapter, readProtocol, options.limits()) : readProtocol;
                 if (options.request != null) { return emit(protocol.handle(options.request), json) ? 0 : 1; }
                 BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-                return json ? jsonSession(protocol, input) : terminalSession(protocol, input);
+                return json ? jsonSession(protocol, input) : terminalSession(readProtocol, input);
             }
         } catch (DatabaseAdapter.AdapterException e) {
             emit(AdapterProtocol.error(null, e.getCode().name(), e.getMessage(), e.getRequestId(), e.getLimit()), json);
@@ -51,7 +54,7 @@ public final class DatabaseClient {
         }
     }
 
-    private static int jsonSession(AdapterProtocol protocol, BufferedReader input) throws IOException {
+    private static int jsonSession(ClientProtocol protocol, BufferedReader input) throws IOException {
         boolean failed = false;
         InputLine line;
         while (!protocol.isClosed() && (line = readLine(input)) != null) {
@@ -202,6 +205,7 @@ public final class DatabaseClient {
                   --params <JSON-array>        Bound values for --query
                   --json                       JSON output; JSON Lines session without a one-shot operation
                   --schema-only                Allow schema discovery, excluding queries and stored rows
+                  --workspace                  Trusted local SQL execution; requires an unrestricted JSON session
                   --allow-table <table>         Repeat to restrict tables; default is local owner access
                   --caller <id>                Fixed caller identity (default: local-client)
                   --max-rows <n>               Returned row ceiling (default: 1000)
@@ -224,7 +228,7 @@ public final class DatabaseClient {
 
     private static class Options {
         Path home;
-        boolean json, schemaOnly, help;
+        boolean json, schemaOnly, help, workspace;
         String caller = "local-client";
         Set<String> tables = new HashSet<>();
         Map<String, Object> request;
@@ -247,10 +251,11 @@ public final class DatabaseClient {
                     continue;
                 }
                 if (!flag.equals("--allow-table") && !seen.add(flag)) { throw new IllegalArgumentException("Repeated option: " + flag); }
-                if (Set.of("--json", "--schema-only", "--help", "--tables", "--list-tables", "--capabilities").contains(flag)) {
+                if (Set.of("--json", "--schema-only", "--workspace", "--help", "--tables", "--list-tables", "--capabilities").contains(flag)) {
                     switch (flag) {
                         case "--json": options.json = true; break;
                         case "--schema-only": options.schemaOnly = true; break;
+                        case "--workspace": options.workspace = true; break;
                         case "--help": options.help = true; break;
                         case "--tables": case "--list-tables": options.action("list_tables"); break;
                         case "--capabilities": options.action("get_capabilities"); break;
@@ -287,6 +292,9 @@ public final class DatabaseClient {
             if (options.help) { return options; }
             if (options.home == null) { throw new IllegalArgumentException("Database directory is required; use --help for usage"); }
             if (options.caller.isBlank()) { throw new IllegalArgumentException("Caller identity is required"); }
+            if (options.workspace && (!options.json || options.schemaOnly || !options.tables.isEmpty() || options.request != null)) {
+                throw new IllegalArgumentException("--workspace requires an unrestricted JSON session without a one-shot operation");
+            }
             if (parameters != null) {
                 if (options.request == null || !options.request.get("operation").equals("query_readonly")) {
                     throw new IllegalArgumentException("--params requires --query; use .params in a terminal session");

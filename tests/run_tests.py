@@ -21,6 +21,7 @@ from reliability_checks import check_reliability
 from schema_checks import check_schema
 from agent_checks import check_agent
 from performance_checks import check_performance
+from ui_checks import check_ui
 
 
 def database_hashes():
@@ -264,6 +265,7 @@ def main():
             check_reliability(classpath, workspace / "reliability", run_engine)
             cli_checks(classpath, workspace / "cli")
             check_agent(classpath, workspace / "agent", workspace, run_engine)
+            check_ui(classpath, workspace / "ui", workspace, run_engine)
     finally:
         if database_hashes() != before:
             raise AssertionError("Existing dbms/db files changed during verification")

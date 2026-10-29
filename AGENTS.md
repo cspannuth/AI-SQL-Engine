@@ -68,12 +68,18 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for milestones and initial findings.
 - `sql_agent/`: Python process client, context selection, hosted/local model
   connection, bounded role orchestration, and terminal/JSON tools. The model
   provider remains outside Java; SQL drafting never receives result rows.
+- `sql_agent/ui.py`, `workspace.py`, `web/`: local browser workspace with one
+  serialized owner, trusted console SQL, read-only AI, schema browsing and exports.
+  `dbms/WorkspaceProtocol.java` requires explicit trusted workspace startup.
+  See [docs/UI.md](docs/UI.md).
 - `.env.example`: key-name template. The application loads ignored `.env` for
   model-backed commands; process environment variables take precedence.
 - `.agents/skills/sql-analysis`, `.agents/skills/result-explanation`: role workflows
   loaded explicitly by the application; they do not enforce permissions.
 - `tests/agent_checks.py`, `tests/evaluate_agent.py`: offline integration checks
   and isolated/shared-context evaluations; live model calls require `--live`.
+- `tests/ui_checks.py`: real Java/offline HTTP workspace checks; optional
+  `--browser` also exercises an installed headless browser and saves screenshots.
 
 CRUD and explicit transactions are implemented, including atomic catalog changes.
 SELECT supports projections, aliases, DISTINCT, joins, grouping, common aggregates,
@@ -127,6 +133,7 @@ python tests/reliability_checks.py --seed 42
 python tests/schema_checks.py --through drop
 python tests/agent_checks.py
 python tests/performance_checks.py
+python tests/ui_checks.py
 ```
 
 The tests build into a temporary directory and verify that existing `dbms/db`

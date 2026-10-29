@@ -7,7 +7,7 @@ the Java DBMS executes it and returns the actual result.
 > **Status:** The engine implements a substantial SQLite-oriented SQL subset,
 > with persistence, transactions, constraints, and query planning. It is not
 > fully SQLite compatible. The read-only database adapter and question-answering
-> application are implemented. Chart rendering is planned.
+> application and local browser workspace are implemented. Chart rendering is planned.
 
 ## What it does
 
@@ -17,6 +17,7 @@ the Java DBMS executes it and returns the actual result.
 | Read-only adapter | Discovers schema, enforces a fixed table policy and query budgets, binds values, and returns typed results. |
 | Python application | Selects relevant schema, asks a model to draft SQL, runs it through the adapter, and presents the result. |
 | Agent skills | Define separate SQL-drafting and result-explanation instructions. The application, not a skill file, controls execution. |
+| Browser workspace | Combines schema browsing, trusted SQL execution, AI questions, results, exports, and session activity. |
 
 The SQL engine supports common schema changes, inserts, updates, deletes,
 transactions, joins, grouping, aggregates, subqueries, ordinary CTEs, indexes,
@@ -136,6 +137,20 @@ The database client does not create or seed a missing database. Result IDs
 belong to the current client session and expire; use the agent's `--export`
 option to save a full answer artifact. See the [client protocol](docs/CLIENT.md)
 and [adapter guide](docs/ADAPTER.md) for limits and request formats.
+
+## Open the browser workspace
+
+After building and creating your database, run:
+
+```powershell
+python -m sql_agent ui --db ".local-db" --config config/agent.example.json --open
+```
+
+The workspace opens at `http://127.0.0.1:8765` and includes a database explorer,
+full SQL console with transactions, AI questions, result exports, activity, and
+settings. Close any CLI/client using that database first. SQL and browsing also
+work without `--config` or an API key. See the [UI guide](docs/UI.md) for setup,
+execution boundaries, and session behavior.
 
 ## Verify the project
 

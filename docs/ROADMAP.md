@@ -167,7 +167,21 @@ Gate: a curated question set produces correct results and grounded answers,
 including empty data, ambiguous metrics, SQL errors, and instruction-like text
 stored in database rows.
 
-## 4. Add analytics and visualization
+## 4. Local browser workspace — implemented
+
+The local Python server and browser workspace combine the existing application
+interfaces: schema/row browsing, full trusted SQL execution, query plans,
+transactions, AI questions, typed results, exports, activity, and settings.
+One Java process owns the database; the AI workflow retains its read-only
+operation boundary. API keys stay server-side. See [UI.md](UI.md).
+
+Offline HTTP and real-browser checks cover execution, rollback, persistence,
+read-only AI behavior, exact int64 display/export, and responsive layouts.
+History is bounded and in memory. Database selection and configuration happen at
+startup. Later UI work can add connection switching, editable configuration,
+durable saved queries, and richer editor support.
+
+## 5. Add analytics and visualization
 
 Give the visualization skill a structured handoff: original question, authorized
 result artifact, executed SQL, column types, completeness, units, filters,

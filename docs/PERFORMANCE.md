@@ -41,7 +41,9 @@ indexes. Primary row keys and payloads, catalog version 6, and earlier row forma
 are preserved. The original four-field user index metadata and scalar index-key
 encoding remain readable.
 
-DatabaseClient, the Python SQL agent, and DatabaseAdapter do not backfill indexes.
+Read-only DatabaseClient, Python SQL-agent, and ordinary DatabaseAdapter opens do
+not backfill indexes. The trusted browser workspace opts into writable startup
+and does backfill missing indexes.
 Opening one of those readers, describing schema, or running SELECT does not
 create an index or scan unrelated tables for an upgrade. Open the database once
 with DBMS to upgrade its index coverage, then close it before starting a reader.

@@ -75,12 +75,17 @@ def tool_session(client):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ["ask", "tools"]:
+    for name in ["ask", "tools", "ui"]:
         command = commands.add_parser(name)
         command.add_argument("--db", required=True, help="Existing database directory")
         command.add_argument("--config", help="JSON configuration; secrets come from the environment or .env")
-        command.add_argument("--allow-table", action="append", help="Fixed table policy; repeat to allow several tables")
-        if name == "ask":
+        if name != "ui":
+            command.add_argument("--allow-table", action="append", help="Fixed table policy; repeat to allow several tables")
+        if name == "ui":
+            command.add_argument("--env-file", help="Environment file; defaults to the repository .env")
+            command.add_argument("--port", type=int, default=8765)
+            command.add_argument("--open", action="store_true", help="Open the local workspace in your browser")
+        elif name == "ask":
             command.add_argument("--env-file", help="Environment file; defaults to the repository .env")
             command.add_argument("question", nargs="?", help="Omit to open a persistent conversation")
             command.add_argument("--model")
@@ -94,12 +99,17 @@ def main(argv=None):
             command.add_argument("--schema-only", action="store_true")
     options = parser.parse_args(argv)
     try:
-        if options.command == "ask":
+        if options.command in {"ask", "ui"}:
             load_env(options.env_file)
         config = load_config(options.config)
         database = dict(config.get("database", {}))
-        if options.allow_table:
+        if getattr(options, "allow_table", None):
             database["allowed_tables"] = options.allow_table
+        if options.command == "ui":
+            from .ui import serve
+            config["database"] = database
+            serve(options.db, config, port=options.port, open_browser=options.open)
+            return 0
         if options.command == "tools":
             database["schema_only"] = options.schema_only or database.get("schema_only", False)
         elif options.export and not options.question:
